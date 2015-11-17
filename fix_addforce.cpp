@@ -10,7 +10,8 @@
 #include "math.h"
 #include "stdlib.h"
 #include "string.h"
-
+#include "neighbor.h"
+#include "neigh_list.h"
 #include "domain.h"
 #include "error.h"
 #include "fix_addforce.h"
@@ -37,11 +38,15 @@ FixAddForce::FixAddForce(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 
 	fx = fy = fz = 0.0;
 
+	coupled = 0;
+
 	voidage = vol_solid = vol_solid_total = NULL;
 
 	if (strcmp(arg[3], "drag/stokes") == 0) {
 		force_style = DRAG_STOKES;
 		mu = atof(arg[4]); 
+		if (strcmp(arg[5], "coupled") == 0)
+			coupled = 1;
 	}
 	else if (strcmp(arg[3], "buoyancy") == 0) {
 		force_style = BUOYANCY;
@@ -134,6 +139,7 @@ void FixAddForce::add_drag_stokes()
 {
 	double **v = particle->v;
 	double **f = particle->f;
+	double **x = particle->x;
 	double *mass = particle->mass;
 	int *mask = particle->mask;
 	int *type = particle->type;
@@ -150,6 +156,79 @@ void FixAddForce::add_drag_stokes()
 			f[i][0] += coeff * v[i][0];
 			f[i][1] += coeff * v[i][1];
 			f[i][2] += coeff * v[i][2];
+		}
+	}
+
+	if (coupled = 1){
+		int *ilist, *jlist, *numneigh, **firstneigh;
+		int inum, jnum, jtype, ii, jj, i, j;
+		double imass, h, ih, ihsq, wf;
+		double xtmp, ytmp, ztmp, delx, dely, delz, rsq;
+		inum = neighbor->neighlist->inum;
+		ilist = neighbor->neighlist->ilist;
+		numneigh = neighbor->neighlist->numneigh;
+		firstneigh = neighbor->neighlist->firstneigh;
+
+
+			// add density at each particle via kernel function overlap
+		for (ii = 0; ii < inum; ii++) {
+			i = ilist[ii];
+			xtmp = x[i][0];
+			ytmp = x[i][1];
+			ztmp = x[i][2];
+			itype = type[i];
+			jlist = firstneigh[i];
+			jnum = numneigh[i];
+
+			for (jj = 0; jj < jnum; jj++) {
+				j = jlist[jj];
+
+				jtype = type[j];
+				delx = xtmp - x[j][0];
+				dely = ytmp - x[j][1];
+				delz = ztmp - x[j][2];
+				rsq = delx * delx + dely * dely + delz * delz;
+				pair_id = force->type2pair[itype][itype];
+				h = force->pair[pair_id]->cut[itype][itype];
+				if (rsq < h * h) {
+					ih = 1.0 / h;
+					ihsq = ih * ih;
+
+					if (domain->dim == 3) {
+						/*
+						// Lucy kernel, 3d
+						r = sqrt(rsq);
+						wf = (h - r) * ihsq;
+						wf =  2.0889086280811262819e0 * (h + 3. * r) * wf * wf * wf * ih;
+						*/
+
+						// quadric kernel, 3d
+						wf = 1.0 - rsq * ihsq;
+						wf = wf * wf;
+						wf = wf * wf;
+						wf = 2.1541870227086614782e0 * wf * ihsq * ih;
+					}
+					else {
+						// Lucy kernel, 2d
+						//r = sqrt(rsq);
+						//wf = (h - r) * ihsq;
+						//wf = 1.5915494309189533576e0 * (h + 3. * r) * wf * wf * wf;
+
+						// quadric kernel, 2d
+						wf = 1.0 - rsq * ihsq;
+						wf = wf * wf;
+						wf = wf * wf;
+						wf = 1.5915494309189533576e0 * wf * ihsq;
+						//wf = 0.9 * wf * ihsq;
+					}
+					f[j][0] -= coeff * v[i][0];
+					f[j][1] -= coeff * v[i][1];
+					f[j][2] -= coeff * v[i][2];
+
+				}
+
+			}
+
 		}
 	}
 }

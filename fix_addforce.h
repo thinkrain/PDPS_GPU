@@ -33,7 +33,7 @@ public:
 
  private:
 	double fx, fy, fz;
-
+	int coupled;
 	int force_style;
 
 	// drag_stokes
