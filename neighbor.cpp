@@ -436,13 +436,12 @@ void Neighbor::allocate(int nmax)
 	// allocate NeighList class
 
 	neighlist->grow(nmax);
-
+	int nlocal = particle->nlocal;
 	if (dist_check) {
-		int nlocal = particle->nlocal;
 		if (nlocal > nlocal_old) {
 			nlocal_old = nlocal;
 			memory->destroy(x_old);
-			memory->create(x_old, nlocal_old, 3, "Neighbor: x_old");
+			memory->create(x_old, nlocal + 1000, 3, "Neighbor: x_old");
 		}
 	}
 

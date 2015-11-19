@@ -13,3 +13,4 @@
 #include "fix_sph.h"
 #include "fix_sph_stationary.h"
 #include "fix_setenergy.h"
+#include "fix_nuc.h"
