@@ -118,8 +118,21 @@ void FixNuc::post_force()
 				count++;
 	//			temp = random->uniform();
 				if (count > frequency){
-					if (direction == UP)
-						particle->ptype->create_particle(tid, x[i]);
+					double coord[3];
+					coord[0] = x[i][0];
+					coord[1] = x[i][1];
+					coord[2] = x[i][2];
+					if (direction == UP){
+						mask[i] |= newgid;
+						type[i] = tid;
+						//tag[particle->nlocal - 1] = particle->nlocal;
+						group->glocal[newgid] = group->glocal[newgid] + 1;
+						group->gparticles[newgid] = group->gparticles[newgid] + 1;
+						group->glocal[groupbit] = group->glocal[groupbit] - 1;
+						group->gparticles[groupbit] = group->gparticles[groupbit] - 1;
+			//			
+					}
+					//	particle->ptype->create_particle(tid, coord);
 					//createparticle.create_single(x[i][0], x[i][1], x[i][2] + gap);
 					else if (direction == DOWN)
 						createparticle.create_single(x[i][0], x[i][1], x[i][2] - gap);
@@ -131,11 +144,8 @@ void FixNuc::post_force()
 						createparticle.create_single(x[i][0], x[i][1] - gap, x[i][2]);
 					else if (direction == RIGHT)
 						createparticle.create_single(x[i][0], x[i][1] + gap, x[i][2]);
-					mask[particle->nlocal-1] |= newgid;
-					tag[particle->nlocal-1] = particle->nlocal;
-					group->glocal[newgid] = group->glocal[newgid] + 1;
-					group->gparticles[newgid] = group->gparticles[newgid] + 1;
 					count = 0;
+				
 				}
 
 			}

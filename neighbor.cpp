@@ -441,7 +441,7 @@ void Neighbor::allocate(int nmax)
 		if (nlocal > nlocal_old) {
 			nlocal_old = nlocal;
 			memory->destroy(x_old);
-			memory->create(x_old, nlocal + 1000, 3, "Neighbor: x_old");
+			memory->create(x_old, nlocal + 10000, 3, "Neighbor: x_old");
 		}
 	}
 
