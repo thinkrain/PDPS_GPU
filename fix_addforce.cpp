@@ -153,9 +153,9 @@ void FixAddForce::add_drag_stokes()
 			itype = type[i];
 			pair_id = force->type2pair[itype][itype];
 			R = 0.5 * force->pair[pair_id]->cut[itype][itype];
-			f[i][0] += coeff * v[i][0];
-			f[i][1] += coeff * v[i][1];
-			f[i][2] += coeff * v[i][2];
+			f[i][0] += coeff * R * v[i][0];
+			f[i][1] += coeff * R * v[i][1];
+			f[i][2] += coeff * R * v[i][2];
 		}
 	}
 
@@ -173,61 +173,65 @@ void FixAddForce::add_drag_stokes()
 			// add density at each particle via kernel function overlap
 		for (ii = 0; ii < inum; ii++) {
 			i = ilist[ii];
-			xtmp = x[i][0];
-			ytmp = x[i][1];
-			ztmp = x[i][2];
-			itype = type[i];
-			jlist = firstneigh[i];
-			jnum = numneigh[i];
+			if (mask[i] & groupbit){
+				xtmp = x[i][0];
+				ytmp = x[i][1];
+				ztmp = x[i][2];
+				itype = type[i];
+				jlist = firstneigh[i];
+				jnum = numneigh[i];
 
-			for (jj = 0; jj < jnum; jj++) {
-				j = jlist[jj];
+				for (jj = 0; jj < jnum; jj++) {
+					j = jlist[jj];
 
-				jtype = type[j];
-				delx = xtmp - x[j][0];
-				dely = ytmp - x[j][1];
-				delz = ztmp - x[j][2];
-				rsq = delx * delx + dely * dely + delz * delz;
-				pair_id = force->type2pair[itype][itype];
-				h = force->pair[pair_id]->cut[itype][itype];
-				if (rsq < h * h) {
-					ih = 1.0 / h;
-					ihsq = ih * ih;
+					jtype = type[j];
+					delx = xtmp - x[j][0];
+					dely = ytmp - x[j][1];
+					delz = ztmp - x[j][2];
+					rsq = delx * delx + dely * dely + delz * delz;
+					pair_id = force->type2pair[itype][itype];
+					h = force->pair[pair_id]->cut[itype][itype];
+					if (rsq < h * h) {
+						ih = 1.0 / h;
+						ihsq = ih * ih;
 
-					if (domain->dim == 3) {
-						/*
-						// Lucy kernel, 3d
-						r = sqrt(rsq);
-						wf = (h - r) * ihsq;
-						wf =  2.0889086280811262819e0 * (h + 3. * r) * wf * wf * wf * ih;
-						*/
+						if (domain->dim == 3) {
+							/*
+							// Lucy kernel, 3d
+							r = sqrt(rsq);
+							wf = (h - r) * ihsq;
+							wf =  2.0889086280811262819e0 * (h + 3. * r) * wf * wf * wf * ih;
+							*/
 
-						// quadric kernel, 3d
-						wf = 1.0 - rsq * ihsq;
-						wf = wf * wf;
-						wf = wf * wf;
-						wf = 2.1541870227086614782e0 * wf * ihsq * ih;
+							// quadric kernel, 3d
+							wf = 1.0 - rsq * ihsq;
+							wf = wf * wf;
+							wf = wf * wf;
+							wf = 2.1541870227086614782e0 * wf * ihsq * ih;
+						}
+						else {
+							// Lucy kernel, 2d
+							//r = sqrt(rsq);
+							//wf = (h - r) * ihsq;
+							//wf = 1.5915494309189533576e0 * (h + 3. * r) * wf * wf * wf;
+
+							// quadric kernel, 2d
+							wf = 1.0 - rsq * ihsq;
+							wf = wf * wf;
+							wf = wf * wf;
+							wf = 1.5915494309189533576e0 * wf * ihsq;
+							//wf = 0.9 * wf * ihsq;
+						}
+						R = 0.5 * force->pair[pair_id]->cut[itype][itype];
+						f[j][0] -= coeff * R * v[i][0];
+						f[j][1] -= coeff * R * v[i][1];
+						f[j][2] -= coeff * R * v[i][2];
+
 					}
-					else {
-						// Lucy kernel, 2d
-						//r = sqrt(rsq);
-						//wf = (h - r) * ihsq;
-						//wf = 1.5915494309189533576e0 * (h + 3. * r) * wf * wf * wf;
-
-						// quadric kernel, 2d
-						wf = 1.0 - rsq * ihsq;
-						wf = wf * wf;
-						wf = wf * wf;
-						wf = 1.5915494309189533576e0 * wf * ihsq;
-						//wf = 0.9 * wf * ihsq;
-					}
-					f[j][0] -= coeff * v[i][0];
-					f[j][1] -= coeff * v[i][1];
-					f[j][2] -= coeff * v[i][2];
 
 				}
-
 			}
+		
 
 		}
 	}
