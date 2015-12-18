@@ -56,6 +56,7 @@ void FixSPH::initial_integrate()
 	int *mask = particle->mask;
 	int nlocal = particle->nlocal;
 
+
 	for (int i = 0; i < nlocal; i++) {
 		if (mask[i] & groupbit) {
 			if (particle->rmass_flag) dtfm = dtf / rmass[i];

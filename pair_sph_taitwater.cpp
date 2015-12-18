@@ -227,6 +227,8 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
 
 			  }
 		  }
+		
+
 	  }
   }
 
@@ -283,7 +285,6 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
         tmp = rho[j] / rho0[jtype];
         fj = tmp * tmp * tmp;
         fj = B[jtype] * (fj * fj * tmp - 1.0) / (rho[j] * rho[j]);
-
         // dot product of velocity delta and distance vector
         delVdotDelR = delx * (vxtmp - v[j][0]) + dely * (vytmp - v[j][1])
             + delz * (vztmp - v[j][2]);
@@ -296,6 +297,8 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
         } else {
           fvisc = 0.;
         }
+
+	
 
         // total pair force & thermal energy increment
         fpair = -imass * jmass * (fi + fj + fvisc) * wfd;

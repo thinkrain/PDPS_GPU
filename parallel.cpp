@@ -671,7 +671,6 @@ void Parallel::exchange()
 		hi = subhi[dim];
 		nlocal = particle->nlocal;
 		i = nsend = 0;
-
 		// loop for local particles
 		while (i < nlocal) {
 			if (x[i][dim] < lo || x[i][dim] >= hi) {
@@ -683,7 +682,6 @@ void Parallel::exchange()
 			else i++;
 		}
 		particle->nlocal = nlocal;
-
 		// send/recv particles in both directions
 		// if 1 proc in dimension, no send/recv, set recv buf to send buf
 		// if 2 procs in dimension, single send/recv
@@ -693,6 +691,7 @@ void Parallel::exchange()
 			nrecv = nsend;
 			buf = buf_send;
 		}
+	
 		else {
 			MPI_Sendrecv(&nsend,1,MPI_INT,procneigh[dim][0],0,
 				         &nrecv1,1,MPI_INT,procneigh[dim][1],0,mworld,&status);
@@ -717,10 +716,8 @@ void Parallel::exchange()
 
 			buf = buf_recv;
 		} // if (procgrid[dim] != 1)
-
 		// check incoming particles to see if they are in my box
 		// if so, add to my list
-
 		m = 0;
 		while (m < nrecv) {
 			value = buf[m+dim+1];

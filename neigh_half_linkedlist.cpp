@@ -37,12 +37,14 @@ void Neighbor::half_linkedlist(NeighList *neighlist)
 	int c, c1;                 // cell index and neighbor cell index
 	double **x = particle->x;
 
+
 	// Scan local particles
 
 	int current_page = 0;      // current index of page
 	int current_index = 0;     // current index of list on current page
 
 	int nlocal = particle->nlocal;
+
 	for (i = 0; i < nlocal; i++) {
 		// check if we need to add pages
 		if (pgsize - current_index < onesize) {
@@ -108,8 +110,8 @@ void Neighbor::half_linkedlist(NeighList *neighlist)
 					
 					list[current_page][current_index++] = j;
 					numneigh[inum]++;
+
 				}
-				
 				j = linked_list[j];
 			} // while (j != -1)			
 		} // for (int io = 0; io < noffsets; io++)
@@ -124,6 +126,7 @@ void Neighbor::half_linkedlist(NeighList *neighlist)
 			fprintf(stdout, "particle = %d\n", i);
 		}*/
 	} // for (int i = 0; i < nlocal; i++)
+
 	neighlist->inum = inum;
 	neighlist->last_page = current_page;
 	neighlist->last_index = current_index;
