@@ -9,7 +9,7 @@
 #include "fix_wall_reflect.h"
 #include "fix_wall_vdw.h"
 #include "fix_setforce.h"
-//#include "fix_volume.h"
+#include "fix_volume.h"
 #include "fix_sph.h"
 #include "fix_sph_stationary.h"
 #include "fix_setenergy.h"

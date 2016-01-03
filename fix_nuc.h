@@ -38,6 +38,8 @@ protected:
 	double seed;
 	double gap;
 	int count;
+	double radius_bubble;
+	double mass_bubble;
 
 };
 }

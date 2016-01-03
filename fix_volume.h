@@ -30,8 +30,8 @@ public:
 	void setup();
 	//double compute_vector(int);
 	//double memory_usage();
-	int gravity_flag, initial_flag;
-	int g_id, gasbit;
+	int gravity_flag, initial_flag, region_flag, temperature_flag;
+	int g_id, gasbit, rid;
 	double radius_origin;
 	
 	
@@ -39,10 +39,12 @@ public:
  private:
 	
 	double ratio;
-	double xac;
-	double yac;
-	double zac;
+	double xacc;
+	double yacc;
+	double zacc;
+	double expansion;
 	int count;
+	double T_liq, T_boil, Latent, rho_liq;
 
 };
 
