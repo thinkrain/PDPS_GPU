@@ -31,7 +31,7 @@ enum{UP, DOWN, FRONT, BACK, LEFT, RIGHT};
 
 FixNuc::FixNuc(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 {
-	if (narg < 9) {
+	if (narg < 11) {
 		error->all(FLERR,"Illegal fix Nuc command");
 	}
 	
@@ -43,7 +43,9 @@ FixNuc::FixNuc(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 	newgid = group->bitmask[ngid];
 	frequency = atof(arg[5]);
 	gap = atof(arg[6]);
-	iarg = 7;
+	radius_bubble = atof(arg[7]);
+	mass_bubble = atof(arg[8]);
+	iarg = 9;
 	if (!strcmp(arg[iarg], "up"))
 		direction = UP;
 	else if (!strcmp(arg[iarg], "down"))
@@ -57,7 +59,7 @@ FixNuc::FixNuc(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 	else if (!strcmp(arg[iarg], "right"))
 		direction = RIGHT;
 	else error->all(FLERR, "Illegal command option");
-	seed = atof(arg[8]);
+	seed = atof(arg[10]);
 	count = 0;
 
 }
@@ -100,6 +102,7 @@ void FixNuc::post_force()
 	double **f = particle->f;
 	double *mass = particle->mass;
 	double *rmass = particle->rmass;
+	double *radius = particle->radius;
 	int rmass_flag = particle->rmass_flag;
 	int *mask = particle->mask;
 	int *bitmask = group->bitmask;
@@ -108,8 +111,8 @@ void FixNuc::post_force()
 	int *tag = particle->tag;
 	double temp;
 	CreateParticle createparticle(ps);
-	RanPark *random;
-	random = new RanPark(ps, seed);
+//	RanPark *random;
+//	random = new RanPark(ps, seed);
 //	class ParticleType *ptype = particle->ptype;
 	int inside_flag;
 	if (update->ntimestep % 10 == 0){
@@ -125,6 +128,8 @@ void FixNuc::post_force()
 					if (direction == UP){
 						mask[i] |= newgid;
 						type[i] = tid;
+						radius[i] = radius_bubble;
+						rmass[i] = mass_bubble;
 						//tag[particle->nlocal - 1] = particle->nlocal;
 						group->glocal[newgid] = group->glocal[newgid] + 1;
 						group->gparticles[newgid] = group->gparticles[newgid] + 1;
@@ -151,6 +156,7 @@ void FixNuc::post_force()
 			}
 		}
 	}
-
+//	int i;
+//	i = 0;
 	
 }

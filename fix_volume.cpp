@@ -93,7 +93,7 @@ void FixVolume::post_force()
 	double **x = particle->x;
 	double *density = particle->density;
 	double *radius = particle->radius;
-	double *mass = particle->mass;
+	double *rmass = particle->rmass;
 	double xlo,xhi,ylo,yhi,zlo,zhi;
 	int *type = particle->type;
 	int *mask = particle->mask;
@@ -121,16 +121,16 @@ void FixVolume::post_force()
 			}
 		}
 	}
-//	else if (temperature_flag == 1){
-	//	for (int i = 0; i < nlocal; i++){
-//			if (mask[i] & groupbit) {
-//				rho_bub = mass[i] / (4 / 3 * PI * radius[i] * radius[i] * radius[i]);
-	//			dr = 2.0 / 3.0 * (T_liq - T_boil) / T_boil * Latent * rho_bub / rho_liq;
-//				radius[i] = radius[i] + dr;
-//			}
-	//	}
+	else if (temperature_flag == 1){
+		for (int i = 0; i < nlocal; i++){
+			if (mask[i] & groupbit) {
+				rho_bub = rmass[i] / (4 / 3 * PI * radius[i] * radius[i] * radius[i]);
+				dr = 2.0 / 3.0 * (T_liq - T_boil) / T_boil * Latent * rho_bub / rho_liq;
+				radius[i] = radius[i] + dr;
+			}
+		}
 
-//	}
+	}
 }
 
 /* ---------------------------------------------------------------------- */
