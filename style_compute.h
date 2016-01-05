@@ -4,3 +4,4 @@
 #include "compute_rdf.h"
 #include "compute_stress.h"
 #include "compute_temp.h"
+#include "compute_level.h"

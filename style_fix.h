@@ -14,3 +14,4 @@
 #include "fix_sph_stationary.h"
 #include "fix_setenergy.h"
 #include "fix_nuc.h"
+#include "fix_foam.h"
