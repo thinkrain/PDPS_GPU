@@ -32,11 +32,11 @@ ParticleTypeSph::ParticleTypeSph(PDPS *ps, int narg, char **arg) : ParticleType(
 	 comm_f_only = 0; // we also communicate de and drho in reverse direction
 	 size_forward = 8; // 3 + rho + e + vest[3], that means we may only communicate 5 in hybrid
 	 size_reverse = 5; // 3 + drho + de
-	 size_border = 12; // 6 + rho + e + vest[3] + cv
+	 size_border = 14; // 6 + rho + e + vest[3] + cv + radius + rmass
 	 size_velocity = 3;
-     particle->size_data_atom = 8;
-	 particle->size_data_vel = 4;
-	 particle->xcol_data = 6;
+  //   particle->size_data_atom = 8;
+//	 particle->size_data_vel = 4;
+//	 particle->xcol_data = 6;
 
 	 particle->ee_flag = 1;
 	 particle->rho_flag = 1;
@@ -89,8 +89,8 @@ void ParticleTypeSph::grow(int n)
 	cv = memory->grow(particle->cv, nmax, "particle:cv");
 	vest = memory->grow(particle->vest, nmax, 3, "particle:vest");
 
-//	radius = memory->grow(particle->radius, nmax, "particle: radius");
-//	rmass = memory->grow(particle->rmass, nmax, "particle: rmass");
+	radius = memory->grow(particle->radius, nmax, "particle: radius");
+	rmass = memory->grow(particle->rmass, nmax, "particle: rmass");
 
 }
 
@@ -117,6 +117,7 @@ void ParticleTypeSph::create_particle(int itype, double *coord)
 	cv[nlocal] = 0.0;
 	de[nlocal] = 0.0;
 	drho[nlocal] = 0.0;
+	radius[nlocal] = 0.0;
 	particle->nlocal++;
 }
 
@@ -355,7 +356,8 @@ int ParticleTypeSph::pack_exchange(int i, double *buf)
 	buf[m++] = tag[i];
 	buf[m++] = type[i];
 	buf[m++] = mask[i];
-//	buf[m++] = image[i];
+	buf[m++] = radius[i];
+	buf[m++] = rmass[i];
 	buf[m++] = rho[i];
 	buf[m++] = e[i];
 	buf[m++] = cv[i];
@@ -389,7 +391,8 @@ int ParticleTypeSph::unpack_exchange(double *buf)
 	tag[nlocal] = static_cast<int> (buf[m++]);
 	type[nlocal] = static_cast<int> (buf[m++]);
 	mask[nlocal] = static_cast<int> (buf[m++]);
-//	image[nlocal] =static_cast<int> (buf[m++]);
+	radius[nlocal] = buf[m++];
+	rmass[nlocal] = buf[m++];
 	rho[nlocal] = buf[m++];
 	e[nlocal] = buf[m++];
 	cv[nlocal] = buf[m++];
@@ -417,6 +420,8 @@ void ParticleTypeSph::copyI2J(int i, int j, int delflag)
 	v[j][0] = v[i][0];
 	v[j][1] = v[i][1];
 	v[j][2] = v[i][2];
+	radius[j] = radius[i];
+	rmass[j] = rmass[i];
 	rho[j] = rho[i];
 	drho[j] = drho[i];
 	e[j] = e[i];
@@ -445,6 +450,8 @@ int ParticleTypeSph::pack_border(int n, int *list, double *buf,
 		  buf[m++] = tag[j];
 		  buf[m++] = type[j];
 		  buf[m++] = mask[j];
+		  buf[m++] = radius[j];
+		  buf[m++] = rmass[j];
 		  buf[m++] = rho[j];
 		  buf[m++] = e[j];
           buf[m++] = cv[j];
@@ -465,6 +472,8 @@ int ParticleTypeSph::pack_border(int n, int *list, double *buf,
 		  buf[m++] = tag[j];
 		  buf[m++] = type[j];
 		  buf[m++] = mask[j];
+		  buf[m++] = radius[j];
+		  buf[m++] = rmass[j];
 		  buf[m++] = rho[j];
 		  buf[m++] = e[j];
           buf[m++] = cv[j];
@@ -494,6 +503,8 @@ int ParticleTypeSph::pack_border_vel(int n, int *list, double *buf,
 		  buf[m++] = tag[j];
 		  buf[m++] = type[j];
 		  buf[m++] = mask[j];
+		  buf[m++] = radius[j];
+		  buf[m++] = rmass[j];
 		  buf[m++] = v[j][0];
 		  buf[m++] = v[j][1];
 		  buf[m++] = v[j][2];
@@ -517,6 +528,8 @@ int ParticleTypeSph::pack_border_vel(int n, int *list, double *buf,
 				buf[m++] = tag[j];
 				buf[m++] = type[j];
 				buf[m++] = mask[j];
+				buf[m++] = radius[j];
+				buf[m++] = rmass[j];
 				buf[m++] = v[j][0];
 				buf[m++] = v[j][1];
 				buf[m++] = v[j][2];
@@ -539,6 +552,8 @@ int ParticleTypeSph::pack_border_vel(int n, int *list, double *buf,
 				buf[m++] = tag[j];
 				buf[m++] = type[j];
 				buf[m++] = mask[j];
+				buf[m++] = radius[j];
+				buf[m++] = rmass[j];
 				if (mask[i] & deform_groupbit) {
 					buf[m++] = v[j][0] + dvx;
 					buf[m++] = v[j][1] + dvy;
@@ -576,6 +591,8 @@ void ParticleTypeSph::unpack_border(int n, int first, double *buf)
 		tag[i] = static_cast<int> (buf[m++]);
 		type[i] = static_cast<int> (buf[m++]);
 		mask[i] = static_cast<int> (buf[m++]);
+		radius[i] = buf[m++];
+		rmass[i] = buf[m++];
 		rho[i] = buf[m++];
 		e[i] = buf[m++];
 		cv[i] = buf[m++];
@@ -601,6 +618,8 @@ void ParticleTypeSph::unpack_border_vel(int n, int first, double *buf)
 		tag[i] = static_cast<int> (buf[m++]);
 		type[i] = static_cast<int> (buf[m++]);
 		mask[i] = static_cast<int> (buf[m++]);
+		radius[i] = buf[m++];
+		rmass[i] = buf[m++];
 		v[i][0] = buf[m++];
 		v[i][1] = buf[m++];
 		v[i][2] = buf[m++];

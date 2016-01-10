@@ -40,6 +40,7 @@ protected:
 	int count;
 	double radius_bubble;
 	double mass_bubble;
+	double rho_bubble;
 
 };
 }

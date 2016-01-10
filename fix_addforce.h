@@ -56,7 +56,7 @@ public:
 
 	// buoyancy
 	int g_dim;
-	double rho, g;
+	double rho, g, rho_ref;
 
 	void add_buoyancy();
 

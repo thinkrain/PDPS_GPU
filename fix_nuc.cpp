@@ -31,7 +31,7 @@ enum{UP, DOWN, FRONT, BACK, LEFT, RIGHT};
 
 FixNuc::FixNuc(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 {
-	if (narg < 11) {
+	if (narg < 12) {
 		error->all(FLERR,"Illegal fix Nuc command");
 	}
 	
@@ -45,7 +45,8 @@ FixNuc::FixNuc(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 	gap = atof(arg[6]);
 	radius_bubble = atof(arg[7]);
 	mass_bubble = atof(arg[8]);
-	iarg = 9;
+	rho_bubble = atof(arg[9]);
+	iarg = 10;
 	if (!strcmp(arg[iarg], "up"))
 		direction = UP;
 	else if (!strcmp(arg[iarg], "down"))
@@ -59,7 +60,7 @@ FixNuc::FixNuc(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 	else if (!strcmp(arg[iarg], "right"))
 		direction = RIGHT;
 	else error->all(FLERR, "Illegal command option");
-	seed = atof(arg[10]);
+	seed = atof(arg[11]);
 	count = 0;
 
 }
@@ -103,6 +104,7 @@ void FixNuc::post_force()
 	double *mass = particle->mass;
 	double *rmass = particle->rmass;
 	double *radius = particle->radius;
+	double *rho = particle->rho;
 	int rmass_flag = particle->rmass_flag;
 	int *mask = particle->mask;
 	int *bitmask = group->bitmask;
@@ -130,7 +132,7 @@ void FixNuc::post_force()
 						type[i] = tid;
 						radius[i] = radius_bubble;
 						rmass[i] = mass_bubble;
-						//tag[particle->nlocal - 1] = particle->nlocal;
+						rho[i] = rho_bubble;
 						group->glocal[newgid] = group->glocal[newgid] + 1;
 						group->gparticles[newgid] = group->gparticles[newgid] + 1;
 						group->glocal[groupbit] = group->glocal[groupbit] - 1;
@@ -156,7 +158,5 @@ void FixNuc::post_force()
 			}
 		}
 	}
-//	int i;
-//	i = 0;
 	
 }

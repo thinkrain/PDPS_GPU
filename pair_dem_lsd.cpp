@@ -52,7 +52,7 @@ PairDEMLsd::PairDEMLsd(PDPS *ps) : Pair(ps)
 	pair_list->pair_id = pair_id;
 
 	rot_flag = 1;                               // By default, rotation is considered
-	if (rot_flag && particle->sphere_flag != 1) error->all(FLERR, "Illegal particle type");
+//	if (particle->atomic_flag == 1) error->all(FLERR, "Illegal particle type");
 }
 
 /* ---------------------------------------------------------------------- */
@@ -253,7 +253,7 @@ void PairDEMLsd::compute(int eflag, int vflag)
 						// distance from the center of particle to the contact point
 						Li = (rij*rij + radius[i] * radius[i] - radius[j] * radius[j]) / (2 * rij);
 						Lj = rij - Li;
-						// vij = vi - vj + (wi cross Ri) - (wj cross Rj) (relative velocity)
+						// vij = vi - vj + (wi cross Ri) - (wj cross Rj) (relative velocity)  
 						Vec_Cross_Prod_3D(omegainij, omega[i], n);  // Ri = -n  (Ri: from center of particle i to the contact point
 						Vec_Cross_Prod_3D(omegajnij, omega[j], n);  // but n is the vector from particle j to particle i
 

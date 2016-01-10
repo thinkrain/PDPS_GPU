@@ -56,6 +56,7 @@ FixVolume::FixVolume(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 			T_liq = atof(arg[iarg + 1]);
 			T_boil = atof(arg[iarg + 2]);
 			Latent = atof(arg[iarg + 3]);
+//			rho_bub = atof(arg[iarg + 4]);
 			rho_liq = atof(arg[iarg + 4]);
 			iarg += 5;
 		}

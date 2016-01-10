@@ -56,7 +56,7 @@ private:
 	int *tag, *type, *mask, *image;
 	double **x, **v, **f;
 	double *rho, *drho, *e, *de, *cv;
-//	double *radius, *density, *rmass;
+	double *radius, *density, *rmass;
     double **vest; // estimated velocity during force computation
 
 

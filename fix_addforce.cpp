@@ -62,6 +62,8 @@ FixAddForce::FixAddForce(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 		else error->all(FLERR, "Illegal fix addforce buoyancy options");
 		rho = atof(arg[5]);
 		g = atof(arg[6]);
+		rho_ref = atof(arg[7]);
+		
 	}
 	else if (!strcmp(arg[3], "drag/general")) {
 		force_style = DRAG_GENERAL;
@@ -144,18 +146,19 @@ void FixAddForce::add_drag_stokes()
 	int *mask = particle->mask;
 	int *type = particle->type;
 	int nlocal = particle->nlocal;
+	double *radius = particle->radius;
 
-	double R; 
 	int pair_id, itype;
 	double coeff = -6 * PI * mu;
 	for (int i = 0; i < nlocal; i++) {
 		if (mask[i] & groupbit) {
 			itype = type[i];
 			pair_id = force->type2pair[itype][itype];
-			R = 0.5 * force->pair[pair_id]->cut[itype][itype];
-			f[i][0] += coeff * R * v[i][0];
-			f[i][1] += coeff * R * v[i][1];
-			f[i][2] += coeff * R * v[i][2];
+			if (radius[i] < EPSILON)
+			radius[i] = 0.5 * force->pair[pair_id]->cut[itype][itype];
+			f[i][0] += coeff * radius[i] * v[i][0];
+			f[i][1] += coeff * radius[i] * v[i][1];
+			f[i][2] += coeff * radius[i] * v[i][2];
 		}
 	}
 
@@ -222,10 +225,9 @@ void FixAddForce::add_drag_stokes()
 							wf = 1.5915494309189533576e0 * wf * ihsq;
 							//wf = 0.9 * wf * ihsq;
 						}
-						R = 0.5 * force->pair[pair_id]->cut[itype][itype];
-						f[j][0] -= coeff * R * v[i][0];
-						f[j][1] -= coeff * R * v[i][1];
-						f[j][2] -= coeff * R * v[i][2];
+						f[j][0] -= coeff * radius[i] * v[i][0];
+						f[j][1] -= coeff * radius[i] * v[i][1];
+						f[j][2] -= coeff * radius[i] * v[i][2];
 
 					}
 
@@ -403,13 +405,17 @@ void FixAddForce::add_buoyancy()
 
 	double R; 
 	int pair_id, itype;
-	double coeff = 4.0 / 3 * PI * rho *g;
+	double coeff = 4.0 / 3 * PI * (rho_ref - rho) *g;
 	for (int i = 0; i < nlocal; i++) {
 		if (mask[i] & groupbit) {
-			itype = type[i];
-			pair_id = force->type2pair[itype][itype];
-			R = 0.5 * force->pair[pair_id]->cut[itype][itype];
-	//		R = particle->radius[itype];
+			R = particle->radius[i];
+			if (R < EPSILON){
+				itype = type[i];
+				pair_id = force->type2pair[itype][itype];
+				particle->radius[i] = 0.5 * force->pair[pair_id]->cut[itype][itype];
+				R = particle->radius[i];
+			}
+		
 			f[i][g_dim] += coeff * R * R * R;
 		}
 	}

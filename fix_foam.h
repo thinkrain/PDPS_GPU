@@ -40,6 +40,7 @@ protected:
 	int count;
 	double radius_bubble;
 	double mass_bubble;
+	int level_flag, neighbor_flag;
 	
 
 };
