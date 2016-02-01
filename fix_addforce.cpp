@@ -21,6 +21,7 @@
 #include "particle.h"
 #include "phy_const.h"
 #include "region.h"
+#include "pair.h"
 
 using namespace PDPS_NS;
 using namespace FixConst;
@@ -45,8 +46,17 @@ FixAddForce::FixAddForce(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 	if (strcmp(arg[3], "drag/stokes") == 0) {
 		force_style = DRAG_STOKES;
 		mu = atof(arg[4]); 
-		if (strcmp(arg[5], "coupled") == 0)
+		if (strcmp(arg[5], "coupled") == 0){
 			coupled = 1;
+		
+			int itype = atoi(arg[6]);
+			int jtype = atoi(arg[7]);
+			double cutoff = atof(arg[8]);
+			force->pair[0]->setflag[itype][jtype] = 1;
+			force->pair[0]->cut[itype][jtype] = cutoff;
+		
+		}
+			
 	}
 	else if (strcmp(arg[3], "buoyancy") == 0) {
 		force_style = BUOYANCY;
@@ -195,7 +205,7 @@ void FixAddForce::add_drag_stokes()
 					pair_id = force->type2pair[itype][itype];
 					h = force->pair[pair_id]->cut[itype][itype];
 					if (rsq < h * h) {
-						ih = 1.0 / h;
+						ih = 1.0 / h;             
 						ihsq = ih * ih;
 
 						if (domain->dim == 3) {

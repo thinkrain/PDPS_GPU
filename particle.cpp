@@ -236,7 +236,7 @@ void Particle::set_density(int narg, char** arg)
 {
 	int tid;
 
-	if (atomic_flag == 1) error->all(FLERR, "Illegal particle style to call density command");
+	if (sphere_flag == 0) error->all(FLERR, "Illegal particle style to call density command");
 	if (narg != 2) error->all(FLERR, "Illegal density command");
 
 	tid = atoi(arg[0]);
@@ -255,7 +255,7 @@ void Particle::set_density(int narg, char** arg)
 
 void Particle::set_radius(int narg, char** arg)
 {	
-	if (atomic_flag == 1) error->all(FLERR, "Particle style is not correct to call radius command");
+	if (sphere_flag == 0) error->all(FLERR, "Particle style is not correct to call radius command");
 	if (narg < 1) error->all(FLERR, "Illegal radius command");
 
 	int gid = group->find_group(arg[0]);

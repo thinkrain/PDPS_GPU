@@ -43,7 +43,8 @@ ParticleTypeSph::ParticleTypeSph(PDPS *ps, int narg, char **arg) : ParticleType(
 	 particle->cv_flag = 1;
 	 particle->vest_flag = 1;
 
-//	 particle->atomic_flag = 0;
+	 particle->atomic_flag = 1; 
+	 particle->sphere_flag = 1;
  //	 particle->radius_flag = 1;
 //	 particle->rmass_flag = 1;
 //	 particle->density_flag = 1;

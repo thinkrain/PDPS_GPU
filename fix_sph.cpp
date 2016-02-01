@@ -77,6 +77,9 @@ void FixSPH::initial_integrate()
 			x[i][0] += dtv * v[i][0];
 			x[i][1] += dtv * v[i][1];
 			x[i][2] += dtv * v[i][2];
+			if (groupbit == 4){
+				f[i][2] = f[i][2];
+			}
 		}
 	}
 	
@@ -113,6 +116,9 @@ void FixSPH::final_integrate()
 			v[i][0] += dtfm * f[i][0];
 			v[i][1] += dtfm * f[i][1];
 			v[i][2] += dtfm * f[i][2];
+			if (groupbit == 4){
+				f[i][2] = f[i][2];
+			}
 
 			e[i] += dtf * de[i];
 		//	rho[i] += dtf * drho[i];
