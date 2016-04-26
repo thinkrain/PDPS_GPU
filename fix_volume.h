@@ -44,7 +44,7 @@ public:
 	double zacc;
 	double expansion;
 	int count;
-	double T_liq, T_boil, Latent, rho_liq;
+	double T_liq, T_boil, Latent, rho_liq, rho_bub;
 
 };
 

@@ -13,6 +13,7 @@
 #include "error.h"
 #include "fix_volume.h"
 #include "force.h"
+#include "update.h"
 #include "memory.h"
 #include "pair.h"
 #include "particle.h"
@@ -56,9 +57,9 @@ FixVolume::FixVolume(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 			T_liq = atof(arg[iarg + 1]);
 			T_boil = atof(arg[iarg + 2]);
 			Latent = atof(arg[iarg + 3]);
-//			rho_bub = atof(arg[iarg + 4]);
-			rho_liq = atof(arg[iarg + 4]);
-			iarg += 5;
+			rho_bub = atof(arg[iarg + 4]);
+			rho_liq = atof(arg[iarg + 5]);
+			iarg += 6;
 		}
 		else error->all(FLERR, "Illegal command option");
 	} 
@@ -101,7 +102,7 @@ void FixVolume::post_force()
 	int nlocal = particle->nlocal;
 	double expansion, pressure;
 	double xdepth, ydepth, zdepth;
-	double rho_bub, dr;
+	double dr;
 	xlo = domain->boxlo[0];									// by now only work for box domain
 	xhi = domain->boxhi[0];
 	ylo = domain->boxlo[1];
@@ -125,8 +126,7 @@ void FixVolume::post_force()
 	else if (temperature_flag == 1){
 		for (int i = 0; i < nlocal; i++){
 			if (mask[i] & groupbit) {
-				rho_bub = rmass[i] / (4 / 3 * PI * radius[i] * radius[i] * radius[i]);
-				dr = 2.0 / 3.0 * (T_liq - T_boil) / T_boil * Latent * rho_bub / rho_liq;
+				dr = 2.0 / 3.0 * (T_liq - T_boil) / T_boil * Latent * rho_bub / rho_liq * update->dt;
 				radius[i] = radius[i] + dr;
 			}
 		}
