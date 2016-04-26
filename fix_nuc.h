@@ -33,9 +33,9 @@ public:
 protected:
 	int rid, tid, newgid;                  // region id, type id, new group id
 	int region_flag;          // region enable flag
-	double frequency;
+	int frequency;
 	int direction;
-	double seed;
+	int seed;
 	double gap;
 	int count;
 	double radius_bubble;

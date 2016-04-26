@@ -41,7 +41,7 @@ FixNuc::FixNuc(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 	tid = atof(arg[3]);
 	int ngid = group->find_group(arg[4]);
 	newgid = group->bitmask[ngid];
-	frequency = atof(arg[5]);
+	frequency = atoi(arg[5]);
 	gap = atof(arg[6]);
 	radius_bubble = atof(arg[7]);
 	mass_bubble = atof(arg[8]);
@@ -60,7 +60,7 @@ FixNuc::FixNuc(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 	else if (!strcmp(arg[iarg], "right"))
 		direction = RIGHT;
 	else error->all(FLERR, "Illegal command option");
-	seed = atof(arg[11]);
+	seed = atoi(arg[11]);
 	count = 0;
 
 }
@@ -105,6 +105,7 @@ void FixNuc::post_force()
 	double *rmass = particle->rmass;
 	double *radius = particle->radius;
 	double *rho = particle->rho;
+	double *density = particle->density;
 	int rmass_flag = particle->rmass_flag;
 	int *mask = particle->mask;
 	int *bitmask = group->bitmask;
@@ -117,45 +118,51 @@ void FixNuc::post_force()
 //	random = new RanPark(ps, seed);
 //	class ParticleType *ptype = particle->ptype;
 	int inside_flag;
-	if (update->ntimestep % 10 == 0){
-		for (int i = 0; i < nlocal; i++) {
-			if (mask[i] & groupbit) {
-				count++;
-	//			temp = random->uniform();
-				if (count > frequency){
-					double coord[3];
-					coord[0] = x[i][0];
-					coord[1] = x[i][1];
-					coord[2] = x[i][2];
-					if (direction == UP){
-						mask[i] |= newgid;
-						type[i] = tid;
-						radius[i] = radius_bubble;
-						rmass[i] = mass_bubble;
-						rho[i] = rho_bubble;
-						group->glocal[newgid] = group->glocal[newgid] + 1;
-						group->gparticles[newgid] = group->gparticles[newgid] + 1;
-						group->glocal[groupbit] = group->glocal[groupbit] - 1;
-						group->gparticles[groupbit] = group->gparticles[groupbit] - 1;
-			//			
-					}
-					//	particle->ptype->create_particle(tid, coord);
-					//createparticle.create_single(x[i][0], x[i][1], x[i][2] + gap);
-					else if (direction == DOWN)
-						createparticle.create_single(x[i][0], x[i][1], x[i][2] - gap);
-					else if (direction == FRONT)
-						createparticle.create_single(x[i][0] + gap, x[i][1], x[i][2]);
-					else if (direction == BACK)
-						createparticle.create_single(x[i][0] - gap, x[i][1], x[i][2]);
-					else if (direction == LEFT)
-						createparticle.create_single(x[i][0], x[i][1] - gap, x[i][2]);
-					else if (direction == RIGHT)
-						createparticle.create_single(x[i][0], x[i][1] + gap, x[i][2]);
-					count = 0;
-				
+	int rised = 0;
+	for (int j = 0; j < nlocal; j++) {
+		int i = (j + update->ntimestep * seed) % nlocal;
+		if (mask[i] & groupbit) {
+			if (mask[i] & newgid)
+				continue;
+			count++;
+//			temp = random->uniform();
+			if (count > seed){
+				double coord[3];
+				coord[0] = x[i][0];
+				coord[1] = x[i][1];
+				coord[2] = x[i][2];
+				rised++;
+				if (direction == UP){
+					mask[i] |= newgid;
+					type[i] = tid;
+					radius[i] = radius_bubble;
+					rmass[i] = mass_bubble;
+					rho[i] = rho_bubble;
+					density[i] = rho_bubble;
+					group->glocal[newgid] = group->glocal[newgid] + 1;
+					group->gparticles[newgid] = group->gparticles[newgid] + 1;
+					group->glocal[groupbit] = group->glocal[groupbit] - 1;
+					group->gparticles[groupbit] = group->gparticles[groupbit] - 1;
+		//			
 				}
-
+				//	particle->ptype->create_particle(tid, coord);
+				//createparticle.create_single(x[i][0], x[i][1], x[i][2] + gap);
+				else if (direction == DOWN)
+					createparticle.create_single(x[i][0], x[i][1], x[i][2] - gap);
+				else if (direction == FRONT)
+					createparticle.create_single(x[i][0] + gap, x[i][1], x[i][2]);
+				else if (direction == BACK)
+					createparticle.create_single(x[i][0] - gap, x[i][1], x[i][2]);
+				else if (direction == LEFT)
+					createparticle.create_single(x[i][0], x[i][1] - gap, x[i][2]);
+				else if (direction == RIGHT)
+					createparticle.create_single(x[i][0], x[i][1] + gap, x[i][2]);
+				count = 0;
+				
 			}
+			if (rised >= frequency)
+				break;
+
 		}
 	}
 	
