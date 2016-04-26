@@ -114,6 +114,8 @@ void FixFoam::post_force()
 		for (int i = 0; i < nlocal; i++) {
 			if (mask[i] & groupbit) {
 				if (x[i][2] > modify->compute[0]->scalar){
+					
+					x[i][2] = domain->boxhi[2] + domain->xle;
 					mask[i] = 1;
 					mask[i] |= newgid;
 					type[i] = tid;
