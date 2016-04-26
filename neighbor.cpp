@@ -477,6 +477,7 @@ void Neighbor::create_linked_list()
 	for (int i = nall-1; i >= 0; i--) {
 		c = coord2cell(x[i]);
 		if (c < 0 || c >= subncxyz ) {	
+			printf("c = %f", c);
 			error->all(FLERR,"Invalid cell setup");
 		}
 		// Link to the previoius occupant (or -1 if you are the 1st)

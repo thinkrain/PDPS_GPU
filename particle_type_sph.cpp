@@ -30,9 +30,9 @@ ParticleTypeSph::ParticleTypeSph(PDPS *ps, int narg, char **arg) : ParticleType(
 {
 	 comm_x_only = 0; // we communicate not only x forward but also vest ...
 	 comm_f_only = 0; // we also communicate de and drho in reverse direction
-	 size_forward = 8; // 3 + rho + e + vest[3], that means we may only communicate 5 in hybrid
+	 size_forward = 11; // 3 + rho + e + vest[3] + density + radius + rmass, that means we may only communicate 5 in hybrid
 	 size_reverse = 5; // 3 + drho + de
-	 size_border = 14; // 6 + rho + e + vest[3] + cv + radius + rmass
+	 size_border = 15; // 6 + rho + e + vest[3] + cv + radius + rmass + density(for bubble)
 	 size_velocity = 3;
   //   particle->size_data_atom = 8;
 //	 particle->size_data_vel = 4;
@@ -45,7 +45,7 @@ ParticleTypeSph::ParticleTypeSph(PDPS *ps, int narg, char **arg) : ParticleType(
 
 	 particle->atomic_flag = 1; 
 	 particle->sphere_flag = 1;
- //	 particle->radius_flag = 1;
+// 	 particle->radius_flag = 1;
 //	 particle->rmass_flag = 1;
 //	 particle->density_flag = 1;
 
@@ -89,7 +89,7 @@ void ParticleTypeSph::grow(int n)
 	de = memory->grow(particle->de, nmax, "particle:de");
 	cv = memory->grow(particle->cv, nmax, "particle:cv");
 	vest = memory->grow(particle->vest, nmax, 3, "particle:vest");
-
+	density = memory->grow(particle->density, nmax, "particle: density");
 	radius = memory->grow(particle->radius, nmax, "particle: radius");
 	rmass = memory->grow(particle->rmass, nmax, "particle: rmass");
 
@@ -119,6 +119,8 @@ void ParticleTypeSph::create_particle(int itype, double *coord)
 	de[nlocal] = 0.0;
 	drho[nlocal] = 0.0;
 	radius[nlocal] = 0.0;
+	density[nlocal] = 0.0;
+	rmass[nlocal] = 0.0;
 	particle->nlocal++;
 }
 
@@ -162,6 +164,10 @@ void ParticleTypeSph::data_particle(double *coord, char **values)
 	de[nlocal] = 0.0;
 	drho[nlocal] = 0.0;
 
+	radius[nlocal] = 0.0;
+	density[nlocal] = 0.0;
+	rmass[nlocal] = 0.0;
+
 	particle->nlocal++;
 }
 
@@ -197,6 +203,9 @@ int ParticleTypeSph::pack_comm(int n, int *list, double *buf,
 			buf[m++] = vest[j][0];
 			buf[m++] = vest[j][1];
 			buf[m++] = vest[j][2];
+			buf[m++] = radius[j];
+			buf[m++] = density[j];
+			buf[m++] = rmass[j];
 		}
 	} 
 	else {
@@ -214,6 +223,9 @@ int ParticleTypeSph::pack_comm(int n, int *list, double *buf,
 			buf[m++] = vest[j][0];
 			buf[m++] = vest[j][1];
 			buf[m++] = vest[j][2];
+			buf[m++] = radius[j];
+			buf[m++] = density[j];
+			buf[m++] = rmass[j];
 		}
 	}
 	return m;
@@ -242,6 +254,9 @@ int ParticleTypeSph::pack_comm_vel(int n, int *list, double *buf,
 			buf[m++] = vest[j][0];
 			buf[m++] = vest[j][1];
 			buf[m++] = vest[j][2];
+			buf[m++] = radius[j];
+			buf[m++] = density[j];
+			buf[m++] = rmass[j];
 		}
 	} // if (pbc_flag == 0)
 	else {
@@ -263,6 +278,9 @@ int ParticleTypeSph::pack_comm_vel(int n, int *list, double *buf,
 				buf[m++] = vest[j][0];
 				buf[m++] = vest[j][1];
 				buf[m++] = vest[j][2];
+				buf[m++] = radius[j];
+				buf[m++] = density[j];
+				buf[m++] = rmass[j];
 
 			}
 		} 
@@ -290,6 +308,9 @@ int ParticleTypeSph::pack_comm_vel(int n, int *list, double *buf,
 				buf[m++] = vest[j][0];
 				buf[m++] = vest[j][1];
 				buf[m++] = vest[j][2];
+				buf[m++] = radius[j];
+				buf[m++] = density[j];
+				buf[m++] = rmass[j];
 			}
 		} // else if (deform_vremap == 1)
 	} // else if (pbc_flag != 0)
@@ -313,6 +334,9 @@ void ParticleTypeSph::unpack_comm(int n, int first, double *buf)
 		vest[i][0] = buf[m++];
 		vest[i][1] = buf[m++];
 		vest[i][2] = buf[m++];
+		radius[i] = buf[m++];
+		density[i] = buf[m++];
+		rmass[i] = buf[m++];
 	}
 }
 
@@ -336,6 +360,11 @@ void ParticleTypeSph::unpack_comm_vel(int n, int first, double *buf)
 		vest[i][0] = buf[m++];
 		vest[i][1] = buf[m++];
 		vest[i][2] = buf[m++];
+		radius[i] = buf[m++];
+		density[i] = buf[m++];
+		rmass[i] = buf[m++];
+		
+	
 	}
 }
 
@@ -365,6 +394,7 @@ int ParticleTypeSph::pack_exchange(int i, double *buf)
 	buf[m++] = vest[i][0];
 	buf[m++] = vest[i][1];
 	buf[m++] = vest[i][2];
+	buf[m++] = density[i];
 
 	
 	buf[0] = m;
@@ -400,6 +430,7 @@ int ParticleTypeSph::unpack_exchange(double *buf)
 	vest[nlocal][0] = buf[m++];
 	vest[nlocal][1] = buf[m++];
 	vest[nlocal][2] = buf[m++];
+	density[nlocal] = buf[m++];
 
 	particle->nlocal++;
 	return m;
@@ -425,12 +456,14 @@ void ParticleTypeSph::copyI2J(int i, int j, int delflag)
 	rmass[j] = rmass[i];
 	rho[j] = rho[i];
 	drho[j] = drho[i];
+//	density[j] = density[i];
 	e[j] = e[i];
 	de[j] = de[i];
 	cv[j] = cv[i];
 	vest[j][0] = vest[i][0];
 	vest[j][1] = vest[i][1];
 	vest[j][2] = vest[i][2];
+	density[j] = density[i];
 }
 
 /* ---------------------------------------------------------------------- */
@@ -459,6 +492,7 @@ int ParticleTypeSph::pack_border(int n, int *list, double *buf,
           buf[m++] = vest[j][0];
           buf[m++] = vest[j][1];
           buf[m++] = vest[j][2];
+		  buf[m++] = density[i];
 		}
 	} 
 	else {
@@ -481,6 +515,8 @@ int ParticleTypeSph::pack_border(int n, int *list, double *buf,
           buf[m++] = vest[j][0];
           buf[m++] = vest[j][1];
           buf[m++] = vest[j][2];
+		  buf[m++] = density[i];
+
 		}
 	}
 	return m;
@@ -515,6 +551,7 @@ int ParticleTypeSph::pack_border_vel(int n, int *list, double *buf,
           buf[m++] = vest[j][0];
 		  buf[m++] = vest[j][1];
 		  buf[m++] = vest[j][2];
+		  buf[m++] = density[j];
 		}
 	} else {
 	  dx = pbc[0]*domain->xle;
@@ -540,6 +577,7 @@ int ParticleTypeSph::pack_border_vel(int n, int *list, double *buf,
 				buf[m++] = vest[j][0];
 				buf[m++] = vest[j][1];
 				buf[m++] = vest[j][2];
+				buf[m++] = density[j];
 			}
 		} else {
 			dvx = pbc[0]*h_rate[0] + pbc[5]*h_rate[5] + pbc[4]*h_rate[4];
@@ -570,6 +608,7 @@ int ParticleTypeSph::pack_border_vel(int n, int *list, double *buf,
 				buf[m++] = vest[j][0];
 				buf[m++] = vest[j][1];
 				buf[m++] = vest[j][2];
+				buf[m++] = density[j];
 			}
 		} // if (!deform_vremap)
 	} // pbc_flag == 0
@@ -600,6 +639,7 @@ void ParticleTypeSph::unpack_border(int n, int first, double *buf)
 		vest[i][0] = buf[m++];
 		vest[i][1] = buf[m++];
 		vest[i][2] = buf[m++];
+		density[i] = buf[m++];
 	}
 }
 
@@ -630,6 +670,7 @@ void ParticleTypeSph::unpack_border_vel(int n, int first, double *buf)
 		vest[i][0] = buf[m++];
 		vest[i][1] = buf[m++];
 		vest[i][2] = buf[m++];
+		density[i] = buf[m++];
 	}
 }
 

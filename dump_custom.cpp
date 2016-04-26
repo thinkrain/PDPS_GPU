@@ -198,7 +198,7 @@ void DumpCustom::parse_field(char *str)
 			//field2index[nfield-1] = modify->find_compute_style("temp");
 		}
 		else if (strcmp(word, "radius") == 0) {
-			if (particle->radius_flag == 0) error->all(FLERR, "Illegal particle_style");
+	//		if (particle->radius_flag == 0) error->all(FLERR, "Illegal particle_style");
 			addfield("radius", &DumpCustom::pack_radius, DOUBLE);
 		}
 		else if (strcmp(word, "density") == 0) {
@@ -475,9 +475,11 @@ void DumpCustom::pack_radius(int n)
 void DumpCustom::pack_density(int n)
 {
 	double *rho_local = force->pair[0]->rho_local;
+	double *density = particle->density;
 
 	for (int i = 0; i < nselected; i++) {
-		buf[n] = rho_local[selected_list[i]];
+		//buf[n] = rho_local[selected_list[i]];
+		buf[n] = density[selected_list[i]];
 		n += nfields;
 	}
 }
