@@ -8,12 +8,13 @@
 ------------------------------------------------------------------------- */
 
 #include "stdio.h"
-
+#include "string.h"
 #include "error.h"
 #include "fix_sph.h"
 #include "force.h"
 #include "particle.h"
 #include "update.h"
+#define PI 3.1416
 
 using namespace PDPS_NS;
 using namespace FixConst;
@@ -22,9 +23,15 @@ using namespace FixConst;
 
 FixSPH::FixSPH(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 {
-	if (narg != 3) error->all(FLERR,"Illegal fix sph command");
+	if (narg != 4) error->all(FLERR,"Illegal fix sph command");
 	 if ((particle->ee_flag != 1) || (particle->rho_flag != 1))
     error->all(FLERR,"fix sph command requires particle_style with both energy and density");
+	 if (strcmp(arg[3], "atomic") == 0)
+		 sphere_flag = 0;
+	 else if (strcmp(arg[3], "sphere") == 0)
+		 sphere_flag = 1;
+	 else
+		 error->all(FLERR, "fix sph command requires particle type, atomic or sphere");
 
 }
 
@@ -52,6 +59,8 @@ void FixSPH::initial_integrate()
 	double *de = particle->de;
 	double *mass = particle->mass;
 	double *rmass = particle->rmass;
+	double *radius = particle->radius;
+	double *density = particle->density;
 	int *type = particle->type;
 	int *mask = particle->mask;
 	int nlocal = particle->nlocal;
@@ -59,7 +68,10 @@ void FixSPH::initial_integrate()
 
 	for (int i = 0; i < nlocal; i++) {
 		if (mask[i] & groupbit) {
-			if (particle->rmass_flag) dtfm = dtf / rmass[i];
+			if (sphere_flag == 1) {
+				rmass[i] = 4 / 3 * PI * density[i] * radius[i] * radius[i] * radius[i];
+				dtfm = dtf / rmass[i];
+			}
 			else dtfm = dtf / mass[type[i]];
 
 			e[i] += dtf * de[i];			// half-step update of particle internal energy
@@ -104,13 +116,18 @@ void FixSPH::final_integrate()
 	double *de = particle->de;
 	double *mass = particle->mass;
 	double *rmass = particle->rmass;
+	double *density = particle->density;
 	int *type = particle->type;
     int *mask = particle->mask;
 	int nlocal = particle->nlocal;
+	double *radius = particle->radius;
 
 	for (int i = 0; i < nlocal; i++) {
 		if (mask[i] & groupbit) {
-			if (particle->rmass_flag) dtfm = dtf / rmass[i];
+			if (sphere_flag == 1) {
+				rmass[i] = 4 / 3 * PI * density[i] * radius[i] * radius[i] * radius[i];
+				dtfm = dtf / rmass[i];
+			}
 			else dtfm = dtf / mass[type[i]];
 			// update velocity at time t + dt
 			v[i][0] += dtfm * f[i][0];

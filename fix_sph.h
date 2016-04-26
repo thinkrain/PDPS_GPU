@@ -36,7 +36,7 @@ private:
 protected:
 	double dtv,dtf;
 	int mass_require;
-
+	int sphere_flag;
 	class Pair *pair;
 };
 
