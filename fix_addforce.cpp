@@ -196,14 +196,16 @@ void FixAddForce::add_drag_stokes()
 
 				for (jj = 0; jj < jnum; jj++) {
 					j = jlist[jj];
-
+					if (mask[i] == mask[j])
+						continue;
 					jtype = type[j];
 					delx = xtmp - x[j][0];
 					dely = ytmp - x[j][1];
 					delz = ztmp - x[j][2];
 					rsq = delx * delx + dely * dely + delz * delz;
 					pair_id = force->type2pair[itype][itype];
-					h = force->pair[pair_id]->cut[itype][itype];
+					//h = force->pair[pair_id]->cut[itype][itype];
+					h = radius[i];
 					if (rsq < h * h) {
 						ih = 1.0 / h;             
 						ihsq = ih * ih;
@@ -235,9 +237,10 @@ void FixAddForce::add_drag_stokes()
 							wf = 1.5915494309189533576e0 * wf * ihsq;
 							//wf = 0.9 * wf * ihsq;
 						}
-						f[j][0] -= coeff * radius[i] * v[i][0];
-						f[j][1] -= coeff * radius[i] * v[i][1];
-						f[j][2] -= coeff * radius[i] * v[i][2];
+						double Volume = 4 / 3 * PI * radius[i] * radius[i] * radius[i];
+						f[j][0] -= coeff * radius[i] * v[i][0] * Volume * wf;
+						f[j][1] -= coeff * radius[i] * v[i][1] * Volume * wf;
+						f[j][2] -= coeff * radius[i] * v[i][2] * Volume * wf;
 
 					}
 

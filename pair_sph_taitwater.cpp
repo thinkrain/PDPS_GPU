@@ -28,6 +28,7 @@ using namespace PDPS_NS;
 
 #define DELTA 1
 #define EPSILON 1.0e-10
+#define PI 3.1416
 
 /* ---------------------------------------------------------------------- */
 
