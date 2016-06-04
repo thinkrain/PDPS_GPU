@@ -99,18 +99,18 @@ double ComputeLevel::createtop(){
 	double **x = particle->x;
 	int *mask = particle->mask;
 	int nlocal = particle->nlocal;
-	double top[100];
-	for (i = 0; i < 100; i++)
+	double top[10];
+	for (i = 0; i < 10; i++)
 		top[i] = 0.0;
 	for (i = 0; i < nlocal; i++){
 		if (mask[i] & groupbit) {
 			// find the top 100 highest particles
-			if (x[i][2] > top[99]){
-				for (j = 99; j >= 0; j--){
+			if (x[i][2] > top[9]){
+				for (j = 9; j >= 0; j--){
 					if (x[i][2] < top[j])
 						break;
 				}
-				for (k = 99; k > j + 1; k--){
+				for (k = 9; k > j + 1; k--){
 					top[k] = top[k - 1];
 				}
 				top[j + 1] = x[i][2];
@@ -118,6 +118,6 @@ double ComputeLevel::createtop(){
 		}
 	}
 
-	return top[99];
+	return top[9];
 
 }
