@@ -119,7 +119,15 @@ void FixNuc::post_force()
 //	class ParticleType *ptype = particle->ptype;
 	int inside_flag;
 	int rised = 0;
-	if (update->ntimestep % 10 == 0){
+	
+	if (update->ntimestep == 0){
+		int rank, nproc;
+		MPI_Comm_rank(mworld, &rank);
+		MPI_Comm_size(mworld, &nproc);
+		count = seed / nproc * rank;
+	}
+
+	if (update->ntimestep % 100 == 0){
 
 		for (int j = 0; j < nlocal; j++) {
 			int i = (j + update->ntimestep * seed) % nlocal;
