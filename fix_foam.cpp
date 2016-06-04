@@ -130,10 +130,19 @@ void FixFoam::post_force()
 	}
 	else if (neighbor_flag == 1){
 		int *numneigh;
+		int jnum;
 		numneigh = neighbor->neighlist->numneigh;
 		for (int i = 0; i < nlocal; i++){
-			if (mask[i] & groupbit) {
-				if (numneigh[i] < 3){
+			if (mask[i] & groupbit && radius[i] > 0.051) {
+				jnum = numneigh[i];
+				int num_sph = 0;
+				for (int j = 0; j < jnum; j++){
+					if (mask[j] == 3)
+						num_sph++;
+				}
+				if (num_sph < 10){
+
+					x[i][2] = domain->boxhi[2] + domain->xle;
 					mask[i] = 1;
 					mask[i] |= newgid;
 					type[i] = tid;
