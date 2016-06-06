@@ -92,6 +92,9 @@ void ParticleTypeSph::grow(int n)
 	density = memory->grow(particle->density, nmax, "particle: density");
 	radius = memory->grow(particle->radius, nmax, "particle: radius");
 	rmass = memory->grow(particle->rmass, nmax, "particle: rmass");
+	poro = memory->grow(particle->poro, nmax, "particle: poro");
+	volume = memory->grow(particle->volume, nmax, "particle: volume");
+	hlocal = memory->grow(particle->hlocal, nmax, "particle: hlocal");
 
 }
 

@@ -27,7 +27,7 @@ public:
 
     int *tag, *type, *mask;          // global ID, type of particle, mask for group
 	double **x, **v, **f;
-	double *radius, *rmass, *density;
+	double *radius, *rmass, *density, *poro, *volume, *hlocal;
 	double **omega, **torque;
 
 		// USER-SPH package

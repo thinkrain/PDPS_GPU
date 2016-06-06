@@ -45,6 +45,8 @@ Particle::Particle(PDPS *ps) : Pointers(ps)
 	density = NULL;
 	omega = NULL;
 	radius = NULL;
+	poro = NULL;
+	volume = NULL;
 	rmass = NULL;
 	torque = NULL;
 

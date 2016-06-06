@@ -8,3 +8,4 @@
 #include "pair_sph_rhosum.h"
 #include "pair_sph_taitwater_morris.h"
 #include "pair_sph_heatconduction.h"
+#include "pair_sph_localNS.h"
