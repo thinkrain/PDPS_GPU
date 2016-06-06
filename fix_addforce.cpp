@@ -152,7 +152,7 @@ void FixAddForce::add_drag_stokes()
 	double **v = particle->v;
 	double **f = particle->f;
 	double **x = particle->x;
-	double *mass = particle->mass;
+	double *mass = particle->mass; 
 	int *mask = particle->mask;
 	int *type = particle->type;
 	int nlocal = particle->nlocal;

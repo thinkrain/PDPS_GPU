@@ -47,6 +47,7 @@ Particle::Particle(PDPS *ps) : Pointers(ps)
 	radius = NULL;
 	poro = NULL;
 	volume = NULL;
+	hlocal = NULL;
 	rmass = NULL;
 	torque = NULL;
 
@@ -237,18 +238,31 @@ void Particle::set_mass(int narg, char** arg)
 void Particle::set_density(int narg, char** arg)
 {
 	int tid;
+	int gid = group->find_group(arg[0]);
+	if (gid == -1) error->all(FLERR, "Cannot find the group id");
+
+	int groupbit = group->bitmask[gid];
 
 	if (sphere_flag == 0) error->all(FLERR, "Illegal particle style to call density command");
-	if (narg != 2) error->all(FLERR, "Illegal density command");
 
-	tid = atoi(arg[0]);
-	if (tid < 1) error->all(FLERR, "Illegal particle type");
-	// Need to tell if box exists
-	if(density == NULL) {
-		allocate_type_arrays();
+	if (!strcmp(arg[1], "set")) {
+		if (narg != 3) error->all(FLERR, "Illegal radius command");
+		for (int i = 0; i < nlocal; i++) {
+			if (mask[i] & groupbit) {
+				density[i] = atof(arg[2]);
+			}
+		}
 	}
 
-	density[tid] = atof(arg[1]);
+
+//	tid = atoi(arg[0]);
+//	if (tid < 1) error->all(FLERR, "Illegal particle type");
+	// Need to tell if box exists
+//	if(density == NULL) {
+//		allocate_type_arrays();
+//	}
+
+//	density[tid] = atof(arg[1]);
 }
 
 /* ----------------------------------------------------------------------
@@ -270,7 +284,9 @@ void Particle::set_radius(int narg, char** arg)
 		for (int i = 0; i < nlocal; i++) {
 			if (mask[i] & groupbit) {
 				radius[i] = atof(arg[2]);
-				rmass[i] = density[type[i]] * 4.0/3 * PI * radius[i] * radius[i] * radius[i];
+				volume[i] = 4.0 / 3 * PI * radius[i] * radius[i] * radius[i];
+				rmass[i] = density[i] * volume[i];
+				
 			}
 		}
 	}
@@ -817,6 +833,9 @@ void Particle::delete_particle(int n)
 		}
 		radius[n] = radius[nlocal];
 		rmass[n] = rmass[nlocal];
+		poro[n] = poro[nlocal];
+		volume[n] = volume[nlocal];
+		hlocal[n] = volume[nlocal];
 	}
 
 	particle->nlocal--;

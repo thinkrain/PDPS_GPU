@@ -39,6 +39,8 @@ PairSPH_LOCALNS::PairSPH_LOCALNS(PDPS *ps) : Pair(ps)
 	 first = 1;
 	 newton_pair = 1;
 	 local_kernel = 0;
+	 couple_force = 0;
+	 couple_flag = 0;
 	 allocated = 0;
 	 sigma = 1.5;
 	 cut = NULL;
@@ -90,6 +92,8 @@ void PairSPH_LOCALNS::allocate()
 
 void PairSPH_LOCALNS::compute(int eflag, int vflag)
 {
+//	if (couple_force == 1)
+//		return;
 	int i, j, ii, jj, inum, jnum, itype, jtype;
   double xtmp, ytmp, ztmp, delx, dely, delz, fpair;
 
@@ -276,81 +280,171 @@ void PairSPH_LOCALNS::compute(int eflag, int vflag)
 
     for (jj = 0; jj < jnum; jj++) {
       j = jlist[jj];
- //     j &= NEIGHMASK;
+	  //     j &= NEIGHMASK;
+	  jtype = type[j];
 
-      delx = xtmp - x[j][0];  
-      dely = ytmp - x[j][1];
-      delz = ztmp - x[j][2];
-      rsq = delx * delx + dely * dely + delz * delz;
-      jtype = type[j];
-      jmass = mass[jtype];
+	  if (setflag[itype][jtype]){
+			  delx = xtmp - x[j][0];
+			  dely = ytmp - x[j][1];
+			  delz = ztmp - x[j][2];
+			  rsq = delx * delx + dely * dely + delz * delz;
 
-      if (rsq < cutsq[itype][jtype]) {
+			  jmass = mass[jtype];
 
-		h = cut[itype][jtype];
-        ih = 1.0 / h;
-        ihsq = ih * ih;
-        wfd = h - sqrt(rsq);
-        if (domain->dim == 3) {
-          // Lucy Kernel, 3d
-          // Note that wfd, the derivative of the weight function with respect to r,
-          // is lacking a factor of r.
-          // The missing factor of r is recovered by
-          // (1) using delV . delX instead of delV . (delX/r) and
-          // (2) using f[i][0] += delx * fpair instead of f[i][0] += (delx/r) * fpair
-          wfd = -25.066903536973515383e0 * wfd * wfd * ihsq * ihsq * ihsq * ih;
-        } else {
-          // Lucy Kernel, 2d
-          wfd = -19.098593171027440292e0 * wfd * wfd * ihsq * ihsq * ihsq;
-        }
+			  if (rsq < cutsq[itype][jtype]) {
 
-        // compute pressure  of particle j with Tait EOS
-        tmp = rho[j] / rho0[jtype] / poro[j];
-        fj = tmp * tmp * tmp;
-        fj = B[jtype] * (fj * fj * tmp - 1.0) / (rho[j] * rho[j]);
-        // dot product of velocity delta and distance vector
-        delVdotDelR = delx * (vxtmp - v[j][0]) + dely * (vytmp - v[j][1])
-            + delz * (vztmp - v[j][2]);
+				  h = cut[itype][jtype];
+				  ih = 1.0 / h;
+				  ihsq = ih * ih;
+				  wfd = h - sqrt(rsq);
+				  if (domain->dim == 3) {
+					  // Lucy Kernel, 3d
+					  // Note that wfd, the derivative of the weight function with respect to r,
+					  // is lacking a factor of r.
+					  // The missing factor of r is recovered by
+					  // (1) using delV . delX instead of delV . (delX/r) and
+					  // (2) using f[i][0] += delx * fpair instead of f[i][0] += (delx/r) * fpair
+					  wfd = -25.066903536973515383e0 * wfd * wfd * ihsq * ihsq * ihsq * ih;
+				  }
+				  else {
+					  // Lucy Kernel, 2d
+					  wfd = -19.098593171027440292e0 * wfd * wfd * ihsq * ihsq * ihsq;
+				  }
 
-        // artificial viscosity (Monaghan 1992)
-        if (delVdotDelR < 0.) {
-          mu = h * delVdotDelR / (rsq + 0.01 * h * h);
-          fvisc = -viscosity[itype][jtype] * (soundspeed[itype]
-              + soundspeed[jtype]) * mu / (rho[i] + rho[j]);
-        } else {
-          fvisc = 0.;
-        }
+				  // compute pressure  of particle j with Tait EOS
+				  tmp = rho[j] / rho0[jtype] / poro[j];
+				  fj = tmp * tmp * tmp;
+				  fj = B[jtype] * (fj * fj * tmp - 1.0) / (rho[j] * rho[j]);
+				  // dot product of velocity delta and distance vector
+				  delVdotDelR = delx * (vxtmp - v[j][0]) + dely * (vytmp - v[j][1])
+					  + delz * (vztmp - v[j][2]);
 
-	
+				  // artificial viscosity (Monaghan 1992)
+				  if (delVdotDelR < 0.) {
+					  mu = h * delVdotDelR / (rsq + 0.01 * h * h);
+					  fvisc = -viscosity[itype][jtype] * (soundspeed[itype]
+						  + soundspeed[jtype]) * mu / (rho[i] + rho[j]);
+				  }
+				  else {
+					  fvisc = 0.;
+				  }
 
-        // total pair force & thermal energy increment
-        fpair = -imass * jmass * (fi + fj + fvisc) * wfd;
-        deltaE = -0.5 * fpair * delVdotDelR;
 
-        f[i][0] += delx * fpair;
-        f[i][1] += dely * fpair;
-        f[i][2] += delz * fpair;
 
-        // and change in density
-        drho[i] += jmass * delVdotDelR * wfd;
+				  // total pair force & thermal energy increment
+				  fpair = -imass * jmass * (fi + fj + fvisc) * wfd;
+				  deltaE = -0.5 * fpair * delVdotDelR;
 
-        // change in thermal energy
-        de[i] += deltaE;
+				  f[i][0] += delx * fpair;
+				  f[i][1] += dely * fpair;
+				  f[i][2] += delz * fpair;
 
-        if (newton_pair || j < nlocal) {
-          f[j][0] -= delx * fpair;
-          f[j][1] -= dely * fpair;
-          f[j][2] -= delz * fpair;
-          de[j] += deltaE;
-          drho[j] += imass * delVdotDelR * wfd;
-        }
+				  // and change in density
+				  drho[i] += jmass * delVdotDelR * wfd;
 
-        if (evflag)
-          ev_tally(i, j, nlocal, newton_pair, 0.0, 0.0, fpair, delx, dely, delz);
-      }
-    }
+				  // change in thermal energy
+				  de[i] += deltaE;
+
+				  if (newton_pair || j < nlocal) {
+					  f[j][0] -= delx * fpair;
+					  f[j][1] -= dely * fpair;
+					  f[j][2] -= delz * fpair;
+					  de[j] += deltaE;
+					  drho[j] += imass * delVdotDelR * wfd;
+				  }
+
+				  if (evflag)
+					  ev_tally(i, j, nlocal, newton_pair, 0.0, 0.0, fpair, delx, dely, delz);
+			  }
+		  }
+	  }
+
+
+     
   }
 
+//	calcuate the coupling force on other phase
+  if (couple_flag == 1) {
+	  double weight;
+	  double fx, fy, fz;
+	  for (ii = 0; ii < inum; ii++) {
+		  i = ilist[ii];
+
+		  itype = type[i];
+		  if (!setflag[itype][itype]){
+			  jlist = firstneigh[i];
+			  jnum = numneigh[i];
+			  imass = mass[itype];
+			  xtmp = x[i][0];
+			  ytmp = x[i][1];
+			  ztmp = x[i][2];
+			  weight = 0.0;
+			  fx = 0.0;
+			  fy = 0.0;
+			  fz = 0.0;
+			  for (jj = 0; jj < jnum; jj++) {
+				  j = jlist[jj];
+				  //     j &= NEIGHMASK;
+				  jtype = type[j];
+				  if (setflag[jtype][jtype]){
+					  delx = xtmp - x[j][0];
+					  dely = ytmp - x[j][1];
+					  delz = ztmp - x[j][2];
+					  rsq = delx * delx + dely * dely + delz * delz;
+					  if (rsq < cutsq[itype][jtype]) {
+						  h = cut[itype][jtype];
+						  ih = 1.0 / h;
+						  ihsq = ih * ih;
+						  jmass = mass[jtype];
+						  if (domain->dim == 3) {
+							  /*
+							  // Lucy kernel, 3d
+							  r = sqrt(rsq);
+							  wf = (h - r) * ihsq;
+							  wf =  2.0889086280811262819e0 * (h + 3. * r) * wf * wf * wf * ih;
+							  */
+
+							  // quadric kernel, 3d
+							  wf = 1.0 - rsq * ihsq;
+							  wf = wf * wf;
+							  wf = wf * wf;
+							  wf = 2.1541870227086614782e0 * wf * ihsq * ih;
+						  }
+						  else {
+							  // Lucy kernel, 2d
+							  //r = sqrt(rsq);
+							  //wf = (h - r) * ihsq;
+							  //wf = 1.5915494309189533576e0 * (h + 3. * r) * wf * wf * wf;
+
+							  // quadric kernel, 2d
+							  wf = 1.0 - rsq * ihsq;
+							  wf = wf * wf;
+							  wf = wf * wf;
+							  wf = 1.5915494309189533576e0 * wf * ihsq;
+							  //wf = 0.9 * wf * ihsq;
+						  }
+						  fx += f[j][0] * jmass * wf;
+						  fy += f[j][1] * jmass * wf;
+						  fz += f[j][2] * jmass * wf;
+						  weight += wf;
+					  }		//  rsq < cutsq
+
+
+
+				  }		//  setflag[j][j]
+
+			  }		//  jnum
+
+			  if (weight > 0.001)
+			  {
+				  f[i][0] = fx / weight * volume[i];
+				  f[i][1] = fy / weight * volume[i];
+				  f[i][2] = fz / weight * volume[i];
+			  }
+
+		  } // setflag[i][i]
+	  } // inum  
+  }
 //  if (vflag_fdotr) virial_fdotr_compute();
 }
 
@@ -362,9 +456,11 @@ void PairSPH_LOCALNS::compute(int eflag, int vflag)
 
 void PairSPH_LOCALNS::set_style(int narg, char **arg)
 {
-	if (narg != 2)
+	if (narg != 3)
 		error->all(FLERR, "Illegal number of setting arguments for pair_style sph/taitwater");
 	nstep = atoi(arg[1]);
+	if (!strcmp(arg[2], "coupled"))
+		couple_flag = 1;
 }
 
 /* ----------------------------------------------------------------------
@@ -381,6 +477,10 @@ void PairSPH_LOCALNS::set_coeff(int narg, char **arg)
   int ilo, ihi, jlo, jhi;
   force->bounds(arg[0], particle->ntypes, ilo, ihi);
   force->bounds(arg[1], particle->ntypes, jlo, jhi);
+
+  // coupling force between different types of particles
+  if (atoi(arg[0]) != atoi(arg[1]))
+	  couple_force = 1;
 
   double rho0_one = atof(arg[2]);
   double soundspeed_one = atof(arg[3]);

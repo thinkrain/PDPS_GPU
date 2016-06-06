@@ -9,21 +9,21 @@
 
 #ifdef PAIR_CLASS
 
-PairStyle(sph_localNS,PairSPH_LOCALNS)
+PairStyle(sph_couple,PairSPH_COUPLE)
 
 #else
 
-#ifndef PS_PAIR_SPH_LOCALNS_H
-#define PS_PAIR_SPH_LOCALNS_H
+#ifndef PS_PAIR_SPH_COUPLE_H
+#define PS_PAIR_SPH_COUPLE_H
 
 #include "pair.h"
 
 namespace PDPS_NS {
 
-class PairSPH_LOCALNS : public Pair {
+class PairSPH_COUPLE : public Pair {
 public:
-	PairSPH_LOCALNS(class PDPS *);
-	~PairSPH_LOCALNS();
+	PairSPH_COUPLE(class PDPS *);
+	~PairSPH_COUPLE();
 
 	void compute(int, int);
 	void set_style(int, char **);
@@ -42,7 +42,7 @@ protected:
 	double *rho0, *soundspeed, *B;
 	double **viscosity;
 	int first, nstep;
-	int couple_flag, couple_force;
+	int phase_f, phase_s;
 	void allocate();
 };
 

@@ -9,3 +9,4 @@
 #include "pair_sph_taitwater_morris.h"
 #include "pair_sph_heatconduction.h"
 #include "pair_sph_localNS.h"
+#include "pair_sph_couple.h"

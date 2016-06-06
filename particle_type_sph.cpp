@@ -30,9 +30,9 @@ ParticleTypeSph::ParticleTypeSph(PDPS *ps, int narg, char **arg) : ParticleType(
 {
 	 comm_x_only = 0; // we communicate not only x forward but also vest ...
 	 comm_f_only = 0; // we also communicate de and drho in reverse direction
-	 size_forward = 11; // 3 + rho + e + vest[3] + density + radius + rmass, that means we may only communicate 5 in hybrid
+	 size_forward = 14; // 3 + rho + e + vest[3] + density + radius + rmass + poro + volume + hlocal, that means we may only communicate 5 in hybrid
 	 size_reverse = 5; // 3 + drho + de
-	 size_border = 15; // 6 + rho + e + vest[3] + cv + radius + rmass + density(for bubble)
+	 size_border = 18; // 6 + rho + e + vest[3] + cv + radius + rmass + density + poro + volume + hlocal(for bubble)
 	 size_velocity = 3;
   //   particle->size_data_atom = 8;
 //	 particle->size_data_vel = 4;
@@ -124,6 +124,9 @@ void ParticleTypeSph::create_particle(int itype, double *coord)
 	radius[nlocal] = 0.0;
 	density[nlocal] = 0.0;
 	rmass[nlocal] = 0.0;
+	poro[nlocal] = 1.0;
+	volume[nlocal] = 0.0;
+	hlocal[nlocal] = 0.0;
 	particle->nlocal++;
 }
 
@@ -171,6 +174,10 @@ void ParticleTypeSph::data_particle(double *coord, char **values)
 	density[nlocal] = 0.0;
 	rmass[nlocal] = 0.0;
 
+	poro[nlocal] = 0.0;
+	volume[nlocal] = 0.0;
+	hlocal[nlocal] = 0.0;
+
 	particle->nlocal++;
 }
 
@@ -209,6 +216,9 @@ int ParticleTypeSph::pack_comm(int n, int *list, double *buf,
 			buf[m++] = radius[j];
 			buf[m++] = density[j];
 			buf[m++] = rmass[j];
+			buf[m++] = poro[j];
+			buf[m++] = volume[j];
+			buf[m++] = hlocal[j];
 		}
 	} 
 	else {
@@ -229,6 +239,9 @@ int ParticleTypeSph::pack_comm(int n, int *list, double *buf,
 			buf[m++] = radius[j];
 			buf[m++] = density[j];
 			buf[m++] = rmass[j];
+			buf[m++] = poro[j];
+			buf[m++] = volume[j];
+			buf[m++] = hlocal[j];
 		}
 	}
 	return m;
@@ -260,6 +273,9 @@ int ParticleTypeSph::pack_comm_vel(int n, int *list, double *buf,
 			buf[m++] = radius[j];
 			buf[m++] = density[j];
 			buf[m++] = rmass[j];
+			buf[m++] = poro[j];
+			buf[m++] = volume[j];
+			buf[m++] = hlocal[j];
 		}
 	} // if (pbc_flag == 0)
 	else {
@@ -284,6 +300,9 @@ int ParticleTypeSph::pack_comm_vel(int n, int *list, double *buf,
 				buf[m++] = radius[j];
 				buf[m++] = density[j];
 				buf[m++] = rmass[j];
+				buf[m++] = poro[j];
+				buf[m++] = volume[j];
+				buf[m++] = hlocal[j];
 
 			}
 		} 
@@ -314,6 +333,9 @@ int ParticleTypeSph::pack_comm_vel(int n, int *list, double *buf,
 				buf[m++] = radius[j];
 				buf[m++] = density[j];
 				buf[m++] = rmass[j];
+				buf[m++] = poro[j];
+				buf[m++] = volume[j];
+				buf[m++] = hlocal[j];
 			}
 		} // else if (deform_vremap == 1)
 	} // else if (pbc_flag != 0)
@@ -340,6 +362,9 @@ void ParticleTypeSph::unpack_comm(int n, int first, double *buf)
 		radius[i] = buf[m++];
 		density[i] = buf[m++];
 		rmass[i] = buf[m++];
+		poro[i] = buf[m++];
+		volume[i] = buf[m++];
+		hlocal[i] = buf[m++];
 	}
 }
 
@@ -366,7 +391,9 @@ void ParticleTypeSph::unpack_comm_vel(int n, int first, double *buf)
 		radius[i] = buf[m++];
 		density[i] = buf[m++];
 		rmass[i] = buf[m++];
-		
+		poro[i] = buf[m++];
+		volume[i] = buf[m++];
+		hlocal[i] = buf[m++];
 	
 	}
 }
@@ -398,6 +425,9 @@ int ParticleTypeSph::pack_exchange(int i, double *buf)
 	buf[m++] = vest[i][1];
 	buf[m++] = vest[i][2];
 	buf[m++] = density[i];
+	buf[m++] = poro[i];
+	buf[m++] = volume[i];
+	buf[m++] = hlocal[i];
 
 	
 	buf[0] = m;
@@ -434,6 +464,9 @@ int ParticleTypeSph::unpack_exchange(double *buf)
 	vest[nlocal][1] = buf[m++];
 	vest[nlocal][2] = buf[m++];
 	density[nlocal] = buf[m++];
+	poro[nlocal] = buf[m++];
+	volume[nlocal] = buf[m++];
+	hlocal[nlocal] = buf[m++];
 
 	particle->nlocal++;
 	return m;
@@ -467,6 +500,9 @@ void ParticleTypeSph::copyI2J(int i, int j, int delflag)
 	vest[j][1] = vest[i][1];
 	vest[j][2] = vest[i][2];
 	density[j] = density[i];
+	poro[j] = poro[i];
+	volume[j] = volume[i];
+	hlocal[j] = hlocal[i];
 }
 
 /* ---------------------------------------------------------------------- */
@@ -496,6 +532,9 @@ int ParticleTypeSph::pack_border(int n, int *list, double *buf,
           buf[m++] = vest[j][1];
           buf[m++] = vest[j][2];
 		  buf[m++] = density[i];
+		  buf[m++] = poro[j];
+		  buf[m++] = volume[j];
+		  buf[m++] = hlocal[i];
 		}
 	} 
 	else {
@@ -519,6 +558,9 @@ int ParticleTypeSph::pack_border(int n, int *list, double *buf,
           buf[m++] = vest[j][1];
           buf[m++] = vest[j][2];
 		  buf[m++] = density[i];
+		  buf[m++] = poro[j];
+		  buf[m++] = volume[j];
+		  buf[m++] = hlocal[i];
 
 		}
 	}
@@ -555,6 +597,9 @@ int ParticleTypeSph::pack_border_vel(int n, int *list, double *buf,
 		  buf[m++] = vest[j][1];
 		  buf[m++] = vest[j][2];
 		  buf[m++] = density[j];
+		  buf[m++] = poro[j];
+		  buf[m++] = volume[j];
+		  buf[m++] = hlocal[i];
 		}
 	} else {
 	  dx = pbc[0]*domain->xle;
@@ -581,6 +626,9 @@ int ParticleTypeSph::pack_border_vel(int n, int *list, double *buf,
 				buf[m++] = vest[j][1];
 				buf[m++] = vest[j][2];
 				buf[m++] = density[j];
+				buf[m++] = poro[j];
+				buf[m++] = volume[j];
+				buf[m++] = hlocal[i];
 			}
 		} else {
 			dvx = pbc[0]*h_rate[0] + pbc[5]*h_rate[5] + pbc[4]*h_rate[4];
@@ -612,6 +660,9 @@ int ParticleTypeSph::pack_border_vel(int n, int *list, double *buf,
 				buf[m++] = vest[j][1];
 				buf[m++] = vest[j][2];
 				buf[m++] = density[j];
+				buf[m++] = poro[j];
+				buf[m++] = volume[j];
+				buf[m++] = hlocal[i];
 			}
 		} // if (!deform_vremap)
 	} // pbc_flag == 0
@@ -643,6 +694,9 @@ void ParticleTypeSph::unpack_border(int n, int first, double *buf)
 		vest[i][1] = buf[m++];
 		vest[i][2] = buf[m++];
 		density[i] = buf[m++];
+		poro[i] = buf[m++];
+		volume[i] = buf[m++];
+		hlocal[i] = buf[m++];
 	}
 }
 
@@ -674,6 +728,9 @@ void ParticleTypeSph::unpack_border_vel(int n, int first, double *buf)
 		vest[i][1] = buf[m++];
 		vest[i][2] = buf[m++];
 		density[i] = buf[m++];
+		poro[i] = buf[m++];
+		volume[i] = buf[m++];
+		hlocal[i] = buf[m++];
 	}
 }
 

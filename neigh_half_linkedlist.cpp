@@ -113,7 +113,7 @@ void Neighbor::half_linkedlist(NeighList *neighlist)
 
 				}
 				j = linked_list[j];
-			} // while (j != -1)			
+			} // while  (j != -1)			
 		} // for (int io = 0; io < noffsets; io++)
 		
 		// if neighbor list is over flow, may need to adjust onesize
