@@ -33,6 +33,7 @@ public:
 
 protected:
 	double cut_global, temperature;
+	int phase_f;
 	int seed;
 	int rank;
 	int local_kernel;				//	kernel length is 1(varying among particles) 0 (uniform)

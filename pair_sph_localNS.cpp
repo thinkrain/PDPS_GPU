@@ -39,7 +39,7 @@ PairSPH_LOCALNS::PairSPH_LOCALNS(PDPS *ps) : Pair(ps)
 	 first = 1;
 	 newton_pair = 1;
 	 local_kernel = 0;
-	 couple_force = 0;
+//	 couple_force = 0;
 	 couple_flag = 0;
 	 allocated = 0;
 	 sigma = 1.5;
@@ -161,210 +161,219 @@ void PairSPH_LOCALNS::compute(int eflag, int vflag)
 		  for (ii = 0; ii < inum; ii++) {
 			  i = ilist[ii];
 			  itype = type[i];
-			  imass = mass[itype];
+			  if (setflag[itype][itype])
+			  {
+				  imass = mass[itype];
+				  h = cut[itype][itype];
+				  if (domain->dim == 3) {
+					  /*
+					  // Lucy kernel, 3d
+					  wf = 2.0889086280811262819e0 / (h * h * h);
+					  */
 
-			  h = cut[itype][itype];
-			  if (domain->dim == 3) {
-				  /*
-				  // Lucy kernel, 3d
-				  wf = 2.0889086280811262819e0 / (h * h * h);
-				  */
+					  // quadric kernel, 3d
+					  wf = 2.1541870227086614782 / (h * h * h);
+				  }
+				  else {
+					  /*
+					  // Lucy kernel, 2d
+					  wf = 1.5915494309189533576e0 / (h * h);
+					  */
 
-				  // quadric kernel, 3d
-				  wf = 2.1541870227086614782 / (h * h * h);
+					  // quadric kernel, 2d
+					  wf = 1.5915494309189533576e0 / (h * h);
+					  //wf = 0.89 / (h * h);
+				  }
+
+				  rho[i] = imass * wf;
+				  poro[i] = 1.0;
 			  }
-			  else {
-				  /*
-				  // Lucy kernel, 2d
-				  wf = 1.5915494309189533576e0 / (h * h);
-				  */
-
-				  // quadric kernel, 2d
-				  wf = 1.5915494309189533576e0 / (h * h);
-				  //wf = 0.89 / (h * h);
-			  }
-
-			  rho[i] = imass * wf;
-			  poro[i] = 1.0;
+			  
 		  }
 
 		  // add density at each particle via kernel function overlap
 		  for (ii = 0; ii < inum; ii++) {
 			  i = ilist[ii];
-			  xtmp = x[i][0];
-			  ytmp = x[i][1];
-			  ztmp = x[i][2];
 			  itype = type[i];
-			  jlist = firstneigh[i];
-			  jnum = numneigh[i];
-			   
-			  for (jj = 0; jj < jnum; jj++) {
-				  j = jlist[jj];
+			  if (setflag[itype][itype]){
+				  xtmp = x[i][0];
+				  ytmp = x[i][1];
+				  ztmp = x[i][2];
+				  jlist = firstneigh[i];
+				  jnum = numneigh[i];
 
-				  jtype = type[j];
-				  delx = xtmp - x[j][0];
-				  dely = ytmp - x[j][1];
-				  delz = ztmp - x[j][2];
-				  rsq = delx * delx + dely * dely + delz * delz;
+				  for (jj = 0; jj < jnum; jj++) {
+					  j = jlist[jj];
 
-				  if (rsq < cutsq[itype][jtype]) {
-					  h = cut[itype][jtype];
-					  ih = 1.0 / h;
-					  ihsq = ih * ih;
+					  jtype = type[j];
+					  delx = xtmp - x[j][0];
+					  dely = ytmp - x[j][1];
+					  delz = ztmp - x[j][2];
+					  rsq = delx * delx + dely * dely + delz * delz;
+					  if (rsq < cutsq[itype][jtype]) {
+						  h = cut[itype][jtype];
+						  ih = 1.0 / h;
+						  ihsq = ih * ih;
 
-					  if (domain->dim == 3) {
-						  /*
-						  // Lucy kernel, 3d
-						  r = sqrt(rsq);
-						  wf = (h - r) * ihsq;
-						  wf =  2.0889086280811262819e0 * (h + 3. * r) * wf * wf * wf * ih;
-						  */
+						  if (domain->dim == 3) {
+							  /*
+							  // Lucy kernel, 3d
+							  r = sqrt(rsq);
+							  wf = (h - r) * ihsq;
+							  wf =  2.0889086280811262819e0 * (h + 3. * r) * wf * wf * wf * ih;
+							  */
 
-						  // quadric kernel, 3d
-						  wf = 1.0 - rsq * ihsq;
-						  wf = wf * wf;
-						  wf = wf * wf;
-						  wf = 2.1541870227086614782e0 * wf * ihsq * ih;
+							  // quadric kernel, 3d
+							  wf = 1.0 - rsq * ihsq;
+							  wf = wf * wf;
+							  wf = wf * wf;
+							  wf = 2.1541870227086614782e0 * wf * ihsq * ih;
+						  }
+						  else {
+							  // Lucy kernel, 2d
+							  //r = sqrt(rsq);
+							  //wf = (h - r) * ihsq;
+							  //wf = 1.5915494309189533576e0 * (h + 3. * r) * wf * wf * wf;
+
+							  // quadric kernel, 2d
+							  wf = 1.0 - rsq * ihsq;
+							  wf = wf * wf;
+							  wf = wf * wf;
+							  wf = 1.5915494309189533576e0 * wf * ihsq;
+							  //wf = 0.9 * wf * ihsq;
+						  }		//consider porosity of liquid
+						  if (itype == jtype)
+							  rho[i] += mass[jtype] * wf;
+						  else
+							  poro[i] -= volume[j] * wf;
 					  }
-					  else {
-						  // Lucy kernel, 2d
-						  //r = sqrt(rsq);
-						  //wf = (h - r) * ihsq;
-						  //wf = 1.5915494309189533576e0 * (h + 3. * r) * wf * wf * wf;
 
-						  // quadric kernel, 2d
-						  wf = 1.0 - rsq * ihsq;
-						  wf = wf * wf;
-						  wf = wf * wf;
-						  wf = 1.5915494309189533576e0 * wf * ihsq;
-						  //wf = 0.9 * wf * ihsq;
-					  }		//consider porosity of liquid
-					  if (itype == jtype)
-						  rho[i] += mass[jtype] * wf;
+				  }
+				  if (local_kernel == 1){
+					  if (domain->dim == 3)
+						  hlocal[i] = sigma * pow((mass[itype] / rho[i]), 1.0 / 3.0);
 					  else
-						  poro[i] -= volume[j] * wf;
+						  hlocal[i] = sigma * pow((mass[itype] / rho[i]), 1.0 / 2.0);
 				  }
 
-			  }
-			  if (local_kernel == 1){
-				  if (domain->dim == 3)
-					  hlocal[i] = sigma * pow((mass[itype] / rho[i]), 1.0 / 3.0);
-				  else
-					  hlocal[i] = sigma * pow((mass[itype] / rho[i]), 1.0 / 2.0);
-			  }
+			  }		//  if setflag[itype][itype]
 			  
-   		  }
+   		  }		// inum
 		
 
-	  }
-  }
+	  }		// update->ntimestep % nstep) == 0
+  }		//	nstep != 0
 
   for (ii = 0; ii < inum; ii++) {
     i = ilist[ii];
-    xtmp = x[i][0];
-    ytmp = x[i][1];
-    ztmp = x[i][2];
-    vxtmp = v[i][0];
-    vytmp = v[i][1];
-    vztmp = v[i][2];
-    itype = type[i];
-    jlist = firstneigh[i];
-    jnum = numneigh[i];
+    itype = type[i];  
+	if (itype == phase_f){
+		xtmp = x[i][0];
+		ytmp = x[i][1];
+		ztmp = x[i][2];
+		vxtmp = v[i][0];
+		vytmp = v[i][1];
+		vztmp = v[i][2];
+		jlist = firstneigh[i];
+		jnum = numneigh[i];
 
-    imass = mass[itype];
+		imass = mass[itype];
 
-    // compute pressure of particle i with Tait EOS
-    tmp = rho[i] / rho0[itype];
-    fi = tmp * tmp * tmp;
-    fi = B[itype] * (fi * fi * tmp - 1.0) / (rho[i] * rho[i]);
+		// compute pressure of particle i with Tait EOS
+		tmp = rho[i] / rho0[itype];
+		fi = tmp * tmp * tmp;
+		fi = B[itype] * (fi * fi * tmp - 1.0) / (rho[i] * rho[i]);
 
-    for (jj = 0; jj < jnum; jj++) {
-      j = jlist[jj];
-	  //     j &= NEIGHMASK;
-	  jtype = type[j];
+		for (jj = 0; jj < jnum; jj++) {
+			j = jlist[jj];
+			//     j &= NEIGHMASK;
+			jtype = type[j];
 
-	  if (setflag[itype][jtype]){
-			  delx = xtmp - x[j][0];
-			  dely = ytmp - x[j][1];
-			  delz = ztmp - x[j][2];
-			  rsq = delx * delx + dely * dely + delz * delz;
+			if (jtype == phase_f){
+				delx = xtmp - x[j][0];
+				dely = ytmp - x[j][1];
+				delz = ztmp - x[j][2];
+				rsq = delx * delx + dely * dely + delz * delz;
 
-			  jmass = mass[jtype];
+				jmass = mass[jtype];
 
-			  if (rsq < cutsq[itype][jtype]) {
+				if (rsq < cutsq[itype][jtype]) {
 
-				  h = cut[itype][jtype];
-				  ih = 1.0 / h;
-				  ihsq = ih * ih;
-				  wfd = h - sqrt(rsq);
-				  if (domain->dim == 3) {
-					  // Lucy Kernel, 3d
-					  // Note that wfd, the derivative of the weight function with respect to r,
-					  // is lacking a factor of r.
-					  // The missing factor of r is recovered by
-					  // (1) using delV . delX instead of delV . (delX/r) and
-					  // (2) using f[i][0] += delx * fpair instead of f[i][0] += (delx/r) * fpair
-					  wfd = -25.066903536973515383e0 * wfd * wfd * ihsq * ihsq * ihsq * ih;
-				  }
-				  else {
-					  // Lucy Kernel, 2d
-					  wfd = -19.098593171027440292e0 * wfd * wfd * ihsq * ihsq * ihsq;
-				  }
+					h = cut[itype][jtype];
+					ih = 1.0 / h;
+					ihsq = ih * ih;
+					wfd = h - sqrt(rsq);
+					if (domain->dim == 3) {
+						// Lucy Kernel, 3d
+						// Note that wfd, the derivative of the weight function with respect to r,
+						// is lacking a factor of r.
+						// The missing factor of r is recovered by
+						// (1) using delV . delX instead of delV . (delX/r) and
+						// (2) using f[i][0] += delx * fpair instead of f[i][0] += (delx/r) * fpair
+						wfd = -25.066903536973515383e0 * wfd * wfd * ihsq * ihsq * ihsq * ih;
+					}
+					else {
+						// Lucy Kernel, 2d
+						wfd = -19.098593171027440292e0 * wfd * wfd * ihsq * ihsq * ihsq;
+					}
 
-				  // compute pressure  of particle j with Tait EOS
-				  tmp = rho[j] / rho0[jtype] / poro[j];
-				  fj = tmp * tmp * tmp;
-				  fj = B[jtype] * (fj * fj * tmp - 1.0) / (rho[j] * rho[j]);
-				  // dot product of velocity delta and distance vector
-				  delVdotDelR = delx * (vxtmp - v[j][0]) + dely * (vytmp - v[j][1])
-					  + delz * (vztmp - v[j][2]);
+					// compute pressure  of particle j with Tait EOS
+					tmp = rho[j] / rho0[jtype] / poro[j];
+					fj = tmp * tmp * tmp;
+					fj = B[jtype] * (fj * fj * tmp - 1.0) / (rho[j] * rho[j]);
+					// dot product of velocity delta and distance vector
+					delVdotDelR = delx * (vxtmp - v[j][0]) + dely * (vytmp - v[j][1])
+						+ delz * (vztmp - v[j][2]);
 
-				  // artificial viscosity (Monaghan 1992)
-				  if (delVdotDelR < 0.) {
-					  mu = h * delVdotDelR / (rsq + 0.01 * h * h);
-					  fvisc = -viscosity[itype][jtype] * (soundspeed[itype]
-						  + soundspeed[jtype]) * mu / (rho[i] + rho[j]);
-				  }
-				  else {
-					  fvisc = 0.;
-				  }
+					// artificial viscosity (Monaghan 1992)
+					if (delVdotDelR < 0.) {
+						mu = h * delVdotDelR / (rsq + 0.01 * h * h);
+						fvisc = -viscosity[itype][jtype] * (soundspeed[itype]
+							+ soundspeed[jtype]) * mu / (rho[i] + rho[j]);
+					}
+					else {
+						fvisc = 0.;
+					}
 
 
 
-				  // total pair force & thermal energy increment
-				  fpair = -imass * jmass * (fi + fj + fvisc) * wfd;
-				  deltaE = -0.5 * fpair * delVdotDelR;
+					// total pair force & thermal energy increment
+					fpair = -imass * jmass * (fi + fj + fvisc) * wfd;
+					deltaE = -0.5 * fpair * delVdotDelR;
 
-				  f[i][0] += delx * fpair;
-				  f[i][1] += dely * fpair;
-				  f[i][2] += delz * fpair;
+					f[i][0] += delx * fpair;
+					f[i][1] += dely * fpair;
+					f[i][2] += delz * fpair;
 
-				  // and change in density
-				  drho[i] += jmass * delVdotDelR * wfd;
+					// and change in density
+					drho[i] += jmass * delVdotDelR * wfd;
 
-				  // change in thermal energy
-				  de[i] += deltaE;
+					// change in thermal energy
+					de[i] += deltaE;
 
-				  if (newton_pair || j < nlocal) {
-					  f[j][0] -= delx * fpair;
-					  f[j][1] -= dely * fpair;
-					  f[j][2] -= delz * fpair;
-					  de[j] += deltaE;
-					  drho[j] += imass * delVdotDelR * wfd;
-				  }
+					if (newton_pair || j < nlocal) {
+						f[j][0] -= delx * fpair;
+						f[j][1] -= dely * fpair;
+						f[j][2] -= delz * fpair;
+						de[j] += deltaE;
+						drho[j] += imass * delVdotDelR * wfd;
+					}
 
-				  if (evflag)
-					  ev_tally(i, j, nlocal, newton_pair, 0.0, 0.0, fpair, delx, dely, delz);
-			  }
-		  }
-	  }
+					if (evflag)
+						ev_tally(i, j, nlocal, newton_pair, 0.0, 0.0, fpair, delx, dely, delz);
+				}		//		rsq < cutsq[itype][jtype]
+			}		//  setflag[itype][jtype]
+		}		//  jnum
+	}	//	setflag[itype][itype]
+	
 
 
      
-  }
+  }		//  inum 
 
-//	calcuate the coupling force on other phase
-  if (couple_flag == 1) {
+//	calcuate the coupling force on other phase  
+  if (couple_flag == 1)
+  {
 	  double weight;
 	  double fx, fy, fz;
 	  for (ii = 0; ii < inum; ii++) {
@@ -437,14 +446,18 @@ void PairSPH_LOCALNS::compute(int eflag, int vflag)
 
 			  if (weight > 0.001)
 			  {
-				  f[i][0] = fx / weight * volume[i];
-				  f[i][1] = fy / weight * volume[i];
-				  f[i][2] = fz / weight * volume[i];
+				  f[i][0] = fx / weight * volume[i] * rho0[phase_f] / jmass;
+				  f[i][1] = fy / weight * volume[i] * rho0[phase_f] / jmass;
+				  f[i][2] = fz / weight * volume[i] * rho0[phase_f] / jmass;
 			  }
 
 		  } // setflag[i][i]
 	  } // inum  
+
+
   }
+	
+
 //  if (vflag_fdotr) virial_fdotr_compute();
 }
 
@@ -456,11 +469,14 @@ void PairSPH_LOCALNS::compute(int eflag, int vflag)
 
 void PairSPH_LOCALNS::set_style(int narg, char **arg)
 {
-	if (narg != 3)
+	if (narg != 4)
 		error->all(FLERR, "Illegal number of setting arguments for pair_style sph/taitwater");
 	nstep = atoi(arg[1]);
-	if (!strcmp(arg[2], "coupled"))
+	if (!strcmp(arg[2], "coupled")) {
 		couple_flag = 1;
+	}
+
+	phase_f = atoi(arg[3]);
 }
 
 /* ----------------------------------------------------------------------
@@ -473,42 +489,51 @@ void PairSPH_LOCALNS::set_coeff(int narg, char **arg)
     error->all(FLERR, "Incorrect args for pair_style sph/taitwater coefficients");
   if (!allocated)
     allocate();
+ // if (atoi(arg[0]) == atoi(arg[1])){
+	  int ilo, ihi, jlo, jhi;
+	  force->bounds(arg[0], particle->ntypes, ilo, ihi);
+	  force->bounds(arg[1], particle->ntypes, jlo, jhi);
 
-  int ilo, ihi, jlo, jhi;
-  force->bounds(arg[0], particle->ntypes, ilo, ihi);
-  force->bounds(arg[1], particle->ntypes, jlo, jhi);
+	  // coupling force between different types of particles
+	  //  if (atoi(arg[0]) != atoi(arg[1]))
+	  //	  couple_force = 1;
 
-  // coupling force between different types of particles
-  if (atoi(arg[0]) != atoi(arg[1]))
-	  couple_force = 1;
+	  double rho0_one = atof(arg[2]);
+	  double soundspeed_one = atof(arg[3]);
+	  double viscosity_one = atof(arg[4]);
+	  double cut_one = atof(arg[5]);
+	  double B_one = soundspeed_one * soundspeed_one * rho0_one / 7.0;
 
-  double rho0_one = atof(arg[2]);
-  double soundspeed_one = atof(arg[3]);
-  double viscosity_one = atof(arg[4]);
-  double cut_one = atof(arg[5]);
-  double B_one = soundspeed_one * soundspeed_one * rho0_one / 7.0;
+	  int count = 0;
+	  for (int i = ilo; i <= ihi; i++) {
+		  rho0[i] = rho0_one;
 
-  int count = 0;
-  for (int i = ilo; i <= ihi; i++) {
-    rho0[i] = rho0_one;
-	
-    soundspeed[i] = soundspeed_one;
-    B[i] = B_one;
-    for (int j = MAX(jlo,i); j <= jhi; j++) {
-      viscosity[i][j] = viscosity_one;
-      //printf("setting cut[%d][%d] = %f\n", i, j, cut_one);
-      cut[i][j] = cut_one;
-	  cutsq[i][j] = cut[i][j] * cut[i][j];
-      setflag[i][j] = 1;
+		  soundspeed[i] = soundspeed_one;
+		  B[i] = B_one;
+		  for (int j = MAX(jlo, i); j <= jhi; j++) {
+			  viscosity[i][j] = viscosity_one;
+			  //printf("setting cut[%d][%d] = %f\n", i, j, cut_one);
+			  cut[i][j] = cut_one;
+			  cutsq[i][j] = cut[i][j] * cut[i][j];
+			  setflag[i][j] = 1;
 
-      //cut[j][i] = cut[i][j];
-      //viscosity[j][i] = viscosity[i][j];
-      //setflag[j][i] = 1;
-      count++;
-    }
-  }
-  if (count == 0)
-    error->all(FLERR,"Incorrect args for pair coefficients");
+			  //cut[j][i] = cut[i][j];
+			  //viscosity[j][i] = viscosity[i][j];
+			  //setflag[j][i] = 1;
+			  count++;
+		  }
+	  }
+	  if (count == 0)
+		  error->all(FLERR, "Incorrect args for pair coefficients");
+//  }
+//  else{
+//	  int i = atoi(arg[0]);
+//	  int j = atoi(arg[1]);
+//	  setflag[i][j] = 1;
+//	  cut[i][j] = atof(arg[5]);
+//	  cutsq[i][j] = cut[i][j] * cut[i][j];
+//  }
+
 }
 
 /* ----------------------------------------------------------------------
