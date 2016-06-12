@@ -39,7 +39,6 @@ PairSPH_LOCALNS::PairSPH_LOCALNS(PDPS *ps) : Pair(ps)
 	 first = 1;
 	 newton_pair = 1;
 	 local_kernel = 0;
-//	 couple_force = 0;
 	 couple_flag = 0;
 	 allocated = 0;
 	 sigma = 1.5;
@@ -54,7 +53,6 @@ PairSPH_LOCALNS::~PairSPH_LOCALNS()
 	if (allocated) {
     memory->destroy(setflag);
     memory->destroy(cutsq);
-
     memory->destroy(cut);
     memory->destroy(rho0);
     memory->destroy(soundspeed);
@@ -77,7 +75,6 @@ void PairSPH_LOCALNS::allocate()
       setflag[i][j] = 0;
 
   memory->create(cutsq, n + 1, n + 1, "pair:cutsq");
-
   memory->create(rho0, n + 1, "pair:rho0");
   memory->create(soundspeed, n + 1, "pair:soundspeed");
   memory->create(B, n + 1, "pair:B");
@@ -92,8 +89,6 @@ void PairSPH_LOCALNS::allocate()
 
 void PairSPH_LOCALNS::compute(int eflag, int vflag)
 {
-//	if (couple_force == 1)
-//		return;
 	int i, j, ii, jj, inum, jnum, itype, jtype;
   double xtmp, ytmp, ztmp, delx, dely, delz, fpair;
 
@@ -120,7 +115,6 @@ void PairSPH_LOCALNS::compute(int eflag, int vflag)
   int nlocal = particle->nlocal;
   double wf;
 //  int newton_pair = force->newton_pair;
-
   // check consistency of pair coefficients
 
   if (first) {
@@ -153,7 +147,6 @@ void PairSPH_LOCALNS::compute(int eflag, int vflag)
 		  
   }
   // loop over neighbors of my particles
-
   if (nstep != 0) {
 	  if ((update->ntimestep % nstep) == 0) {
 
@@ -161,7 +154,7 @@ void PairSPH_LOCALNS::compute(int eflag, int vflag)
 		  for (ii = 0; ii < inum; ii++) {
 			  i = ilist[ii];
 			  itype = type[i];
-			  if (setflag[itype][itype])
+			  if (itype == phase_f)
 			  {
 				  imass = mass[itype];
 				  h = cut[itype][itype];
@@ -184,7 +177,6 @@ void PairSPH_LOCALNS::compute(int eflag, int vflag)
 					  wf = 1.5915494309189533576e0 / (h * h);
 					  //wf = 0.89 / (h * h);
 				  }
-
 				  rho[i] = imass * wf;
 				  poro[i] = 1.0;
 			  }
@@ -195,7 +187,7 @@ void PairSPH_LOCALNS::compute(int eflag, int vflag)
 		  for (ii = 0; ii < inum; ii++) {
 			  i = ilist[ii];
 			  itype = type[i];
-			  if (setflag[itype][itype]){
+			  if (itype == phase_f){
 				  xtmp = x[i][0];
 				  ytmp = x[i][1];
 				  ztmp = x[i][2];
@@ -267,7 +259,7 @@ void PairSPH_LOCALNS::compute(int eflag, int vflag)
   for (ii = 0; ii < inum; ii++) {
     i = ilist[ii];
     itype = type[i];  
-	if (itype == phase_f){
+//	if (itype == phase_f){
 		xtmp = x[i][0];
 		ytmp = x[i][1];
 		ztmp = x[i][2];
@@ -276,7 +268,6 @@ void PairSPH_LOCALNS::compute(int eflag, int vflag)
 		vztmp = v[i][2];
 		jlist = firstneigh[i];
 		jnum = numneigh[i];
-
 		imass = mass[itype];
 
 		// compute pressure of particle i with Tait EOS
@@ -289,7 +280,7 @@ void PairSPH_LOCALNS::compute(int eflag, int vflag)
 			//     j &= NEIGHMASK;
 			jtype = type[j];
 
-			if (jtype == phase_f){
+			if (setflag[itype][jtype]){
 				delx = xtmp - x[j][0];
 				dely = ytmp - x[j][1];
 				delz = ztmp - x[j][2];
@@ -364,7 +355,7 @@ void PairSPH_LOCALNS::compute(int eflag, int vflag)
 				}		//		rsq < cutsq[itype][jtype]
 			}		//  setflag[itype][jtype]
 		}		//  jnum
-	}	//	setflag[itype][itype]
+//	}	//	setflag[itype][itype]
 	
 
 
@@ -494,10 +485,6 @@ void PairSPH_LOCALNS::set_coeff(int narg, char **arg)
 	  force->bounds(arg[0], particle->ntypes, ilo, ihi);
 	  force->bounds(arg[1], particle->ntypes, jlo, jhi);
 
-	  // coupling force between different types of particles
-	  //  if (atoi(arg[0]) != atoi(arg[1]))
-	  //	  couple_force = 1;
-
 	  double rho0_one = atof(arg[2]);
 	  double soundspeed_one = atof(arg[3]);
 	  double viscosity_one = atof(arg[4]);
@@ -511,6 +498,9 @@ void PairSPH_LOCALNS::set_coeff(int narg, char **arg)
 		  soundspeed[i] = soundspeed_one;
 		  B[i] = B_one;
 		  for (int j = MAX(jlo, i); j <= jhi; j++) {
+			  rho0[j] = rho0_one;
+			  soundspeed[j] = soundspeed_one;
+			  B[j] = B_one;
 			  viscosity[i][j] = viscosity_one;
 			  //printf("setting cut[%d][%d] = %f\n", i, j, cut_one);
 			  cut[i][j] = cut_one;

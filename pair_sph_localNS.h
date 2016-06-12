@@ -40,10 +40,10 @@ protected:
 	double **cutd, **cutdsq;
 	double sigma;					//  parameter to control the relationship of kernel length and density
 	class RanMars *random;
-	double *rho0, *soundspeed, *B;
+	double *rho0, *soundspeed, *B;	//  parameter used in SPH computation
 	double **viscosity;
 	int first, nstep;
-	int couple_flag, couple_force;
+	int couple_flag;			//	couple to other phase or not
 	void allocate();
 };
 
