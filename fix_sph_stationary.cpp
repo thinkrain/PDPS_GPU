@@ -54,7 +54,7 @@ void FixSPH_STATIONARY::initial_integrate()
 	for (i = 0; i < nlocal; i++) {
 		if (mask[i] & groupbit) {
 			e[i] += dtf * de[i]; // half-step update of particle internal energy
-			rho[i] += dtf * drho[i]; // ... and density
+//			rho[i] += dtf * drho[i]; // ... and density
 		}
 	}
 
@@ -75,7 +75,7 @@ void FixSPH_STATIONARY::final_integrate()
 	for (int i = 0; i < nlocal; i++) {
 		if (mask[i] & groupbit) {
 			e[i] += dtf * de[i];
-			rho[i] += dtf * drho[i];
+//			rho[i] += dtf * drho[i];
 		}
 	}
 }

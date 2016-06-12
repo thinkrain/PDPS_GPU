@@ -89,9 +89,6 @@ void FixSPH::initial_integrate()
 			x[i][0] += dtv * v[i][0];
 			x[i][1] += dtv * v[i][1];
 			x[i][2] += dtv * v[i][2];
-			if (groupbit == 4){
-				f[i][2] = f[i][2];
-			}
 		}
 	}
 	
