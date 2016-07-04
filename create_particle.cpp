@@ -228,7 +228,7 @@ void CreateParticle::create_spacing(int tid, int rid)
 //	dz = domain->lsp[2];
 	dx = domain->lattice->cle[0];
 	dy = domain->lattice->cle[1];
-	dy = domain->lattice->cle[2];
+	dz = domain->lattice->cle[2];
 
 	npx = int((xle - 2*GAP*xle)/dx) + 1;        // In order to avoid particle overlap on the box boundary, 
 	npy =  int((yle - 2*GAP*yle)/dy) + 1;       // there are two small GAPs 1/4*dx set at two ends of each edge
