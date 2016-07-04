@@ -201,9 +201,9 @@ void PairSPH_COUPLE::compute(int eflag, int vflag)
 							wf = 1.5915494309189533576e0 * wf * ihsq;
 							//wf = 0.9 * wf * ihsq;
 						}
-						fx += f[j][0] * jmass * wf;
-						fy += f[j][1] * jmass * wf;
-						fz += f[j][2] * jmass * wf;
+						fx += f[j][0] * wf;
+						fy += f[j][1] * wf;
+						fz += f[j][2] * wf;
 						weight += wf;
 					}		//  rsq < cutsq
 

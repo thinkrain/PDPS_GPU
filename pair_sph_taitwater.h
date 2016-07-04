@@ -36,11 +36,13 @@ protected:
 	int seed;
 	int rank;
 	double **cutd, **cutdsq;
+	double a2D, a3D, h;
 	class RanMars *random;
 	double *rho0, *soundspeed, *B;
 	double **viscosity;
 	int first, nstep;
-
+	int cubic_flag, quintic_flag;
+	int bcbit;
 	void allocate();
 };
 

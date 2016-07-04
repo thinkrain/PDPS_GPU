@@ -22,6 +22,7 @@
 #include "particle.h"
 #include "random_mars.h"
 #include "update.h"
+#include "group.h"
 
 using namespace PDPS_NS;
 
@@ -39,6 +40,9 @@ PairSPH_TAITWATER::PairSPH_TAITWATER(PDPS *ps) : Pair(ps)
 	 first = 1;
 	 newton_pair = 1;
 	 allocated = 0;
+	 cubic_flag = 0;
+	 quintic_flag = 0;
+	 h = 0.0;
 	 cut = NULL;
 	 cutsq = NULL;
 }
@@ -92,8 +96,8 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
   double xtmp, ytmp, ztmp, delx, dely, delz, fpair;
 
   int *ilist, *jlist, *numneigh, **firstneigh;
-  double vxtmp, vytmp, vztmp, imass, jmass, fi, fj, fvisc, h, ih, ihsq;
-  double rsq, tmp, wfd, delVdotDelR, mu, deltaE;
+  double vxtmp, vytmp, vztmp, imass, jmass, fi, fj, fvisc, q;
+  double rsq, rij_inv, tmp, wfd, delVdotDelR, mu, deltaE;
 
   if (eflag || vflag)
     ev_setup(eflag, vflag);
@@ -108,6 +112,7 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
   double *de = particle->de;
   double *drho = particle->drho;
   int *type = particle->type;
+  int *mask = particle->mask;
   int nlocal = particle->nlocal;
   double wf;
 //  int newton_pair = force->newton_pair;
@@ -142,34 +147,25 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
 	  if ((update->ntimestep % nstep) == 0) {
 
 		  // initialize density with self-contribution,
-		  for (ii = 0; ii < inum; ii++) {
-			  i = ilist[ii];
+		  for (i = 0; i < nlocal; i++) {
 			  itype = type[i];
 			  imass = mass[itype];
 
-			  h = cut[itype][itype];
 			  if (domain->dim == 3) {
-				  /*
-				  // Lucy kernel, 3d
-				  wf = 2.0889086280811262819e0 / (h * h * h);
-				  */
 
-				  // quadric kernel, 3d
-				  wf = 2.1541870227086614782 / (h * h * h);
+				  // Cubic spline kernel, 3d
+				  wf = a3D;
 			  }
 			  else {
-				  /*
-				  // Lucy kernel, 2d
-				  wf = 1.5915494309189533576e0 / (h * h);
-				  */
 
-				  // quadric kernel, 2d
-				  wf = 1.5915494309189533576e0 / (h * h);
+				  // Cubic spline kernel, 2d
+				  wf = a2D;
 				  //wf = 0.89 / (h * h);
 			  }
-
-			  rho[i] = imass * wf;
+			  if (!(mask[i]&bcbit))
+				rho[i] = imass * wf;
 		  }
+
 
 		  // add density at each particle via kernel function overlap
 		  for (ii = 0; ii < inum; ii++) {
@@ -191,39 +187,25 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
 				  rsq = delx * delx + dely * dely + delz * delz;
 
 				  if (rsq < cutsq[itype][jtype]) {
-					  h = cut[itype][jtype];
-					  ih = 1.0 / h;
-					  ihsq = ih * ih;
+					  q = sqrt(rsq) / h;
 
-					  if (domain->dim == 3) {
-						  /*
-						  // Lucy kernel, 3d
-						  r = sqrt(rsq);
-						  wf = (h - r) * ihsq;
-						  wf =  2.0889086280811262819e0 * (h + 3. * r) * wf * wf * wf * ih;
-						  */
-
-						  // quadric kernel, 3d
-						  wf = 1.0 - rsq * ihsq;
-						  wf = wf * wf;
-						  wf = wf * wf;
-						  wf = 2.1541870227086614782e0 * wf * ihsq * ih;
+					  if (cubic_flag == 1){
+						  if (q < 1)
+							  wf = 1 - 1.5 * q * q + 0.75 * q * q * q;
+						  else
+							  wf = 0.25 * (2 - q) * (2 - q) * (2 - q);
 					  }
-					  else {
-						  // Lucy kernel, 2d
-						  //r = sqrt(rsq);
-						  //wf = (h - r) * ihsq;
-						  //wf = 1.5915494309189533576e0 * (h + 3. * r) * wf * wf * wf;
+					  else if (quintic_flag == 1)
+						  wf = (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (2 * q + 1);
 
-						  // quadric kernel, 2d
-						  wf = 1.0 - rsq * ihsq;
-						  wf = wf * wf;
-						  wf = wf * wf;
-						  wf = 1.5915494309189533576e0 * wf * ihsq;
-						  //wf = 0.9 * wf * ihsq;
-					  }
-
-					  rho[i] += mass[jtype] * wf;
+					  if (domain->dim == 3)
+						  wf = wf * a3D;
+					  else
+						  wf = wf * a2D;
+					  if (!(mask[i] & bcbit))
+						  rho[i] += mass[jtype] * wf;
+					  if (!(mask[j] & bcbit))
+						  rho[j] += mass[itype] * wf;
 				  }
 
 			  }
@@ -265,22 +247,21 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
 
       if (rsq < cutsq[itype][jtype]) {
 
-		h = cut[itype][jtype];
-        ih = 1.0 / h;
-        ihsq = ih * ih;
-        wfd = h - sqrt(rsq);
-        if (domain->dim == 3) {
-          // Lucy Kernel, 3d
-          // Note that wfd, the derivative of the weight function with respect to r,
-          // is lacking a factor of r.
-          // The missing factor of r is recovered by
-          // (1) using delV . delX instead of delV . (delX/r) and
-          // (2) using f[i][0] += delx * fpair instead of f[i][0] += (delx/r) * fpair
-          wfd = -25.066903536973515383e0 * wfd * wfd * ihsq * ihsq * ihsq * ih;
-        } else {
-          // Lucy Kernel, 2d
-          wfd = -19.098593171027440292e0 * wfd * wfd * ihsq * ihsq * ihsq;
-        }
+		  q = sqrt(rsq) / h;
+		  rij_inv = 1.0 / sqrt(rsq);
+		  if (cubic_flag == 1){
+			  if (q < 1)
+				  wfd = -3 * q + 2.25 * q * q;
+			  else
+				  wfd = -0.75 * (2 - q) * (2 - q);
+		  }
+		  else if (quintic_flag == 1)
+			  wfd = -2 * (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (2 * q + 1) + 2 * (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0);
+
+		  if (domain->dim == 3)
+			  wfd = wfd * a3D / h;
+		  else
+			  wfd = wfd * a2D / h;
 
         // compute pressure  of particle j with Tait EOS
         tmp = rho[j] / rho0[jtype];
@@ -305,9 +286,9 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
         fpair = -imass * jmass * (fi + fj + fvisc) * wfd;
         deltaE = -0.5 * fpair * delVdotDelR;
 
-        f[i][0] += delx * fpair;
-        f[i][1] += dely * fpair;
-        f[i][2] += delz * fpair;
+		f[i][0] += delx * fpair * rij_inv;
+		f[i][1] += dely * fpair * rij_inv;
+		f[i][2] += delz * fpair * rij_inv;
 
         // and change in density
         drho[i] += jmass * delVdotDelR * wfd;
@@ -316,9 +297,9 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
         de[i] += deltaE;
 
         if (newton_pair || j < nlocal) {
-          f[j][0] -= delx * fpair;
-          f[j][1] -= dely * fpair;
-          f[j][2] -= delz * fpair;
+          f[j][0] -= delx * fpair * rij_inv;
+		  f[j][1] -= dely * fpair * rij_inv;
+		  f[j][2] -= delz * fpair * rij_inv;
           de[j] += deltaE;
           drho[j] += imass * delVdotDelR * wfd;
         }
@@ -340,9 +321,17 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
 
 void PairSPH_TAITWATER::set_style(int narg, char **arg)
 {
-	if (narg != 2)
-		error->all(FLERR, "Illegal number of setting arguments for pair_style sph/taitwater");
-	nstep = atoi(arg[1]);
+//	if (narg != 4)
+//		error->all(FLERR, "Illegal number of setting arguments for pair_style sph/idealgas");
+	if (strcmp(arg[1], "Cubic") == 0)
+		cubic_flag = 1;  
+	else if (strcmp(arg[1], "Quintic") == 0)
+		quintic_flag = 1;
+	else
+		error->all(FLERR, "Wrong Kernel function");
+	nstep = atoi(arg[2]);
+	int gid = group->find_group(arg[3]);
+	bcbit = group->bitmask[gid];
 }
 
 /* ----------------------------------------------------------------------
@@ -372,11 +361,14 @@ void PairSPH_TAITWATER::set_coeff(int narg, char **arg)
     soundspeed[i] = soundspeed_one;
     B[i] = B_one;
     for (int j = MAX(jlo,i); j <= jhi; j++) {
-      viscosity[i][j] = viscosity_one;
-      //printf("setting cut[%d][%d] = %f\n", i, j, cut_one);
-      cut[i][j] = cut_one;
-	  cutsq[i][j] = cut[i][j] * cut[i][j];
-      setflag[i][j] = 1;
+		rho0[j] = rho0_one;
+		soundspeed[j] = soundspeed_one;
+		B[j] = B_one;
+		viscosity[i][j] = viscosity_one;
+		//printf("setting cut[%d][%d] = %f\n", i, j, cut_one);
+		cut[i][j] = cut_one;
+		cutsq[i][j] = cut[i][j] * cut[i][j];
+		setflag[i][j] = 1;
 
       //cut[j][i] = cut[i][j];
       //viscosity[j][i] = viscosity[i][j];
@@ -384,6 +376,18 @@ void PairSPH_TAITWATER::set_coeff(int narg, char **arg)
       count++;
     }
   }
+
+  h = cut_one;
+
+  if (cubic_flag == 1){
+	  a2D = 10.0 / 7.0 / PI / h / h;
+	  a3D = 1.0 / PI / h / h / h;
+  }
+  else if (quintic_flag == 1){
+	  a2D = 7.0 / 4.0 / PI / h / h;
+	  a3D = 21.0 / 16.0 / PI / h / h / h;
+  }
+
   if (count == 0)
     error->all(FLERR,"Incorrect args for pair coefficients");
 }
