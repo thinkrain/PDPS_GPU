@@ -14,6 +14,7 @@ See the README file in the PDPS directory.
 #include "force.h"
 #include "particle.h"
 #include "update.h"
+#include "group.h"
 
 using namespace PDPS_NS;
 using namespace FixConst;
