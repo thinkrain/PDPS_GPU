@@ -207,6 +207,9 @@ void DumpCustom::parse_field(char *str)
 		else if (strcmp(word, "energy") == 0) {
 			addfield("energy", &DumpCustom::pack_energy, DOUBLE);
 		}
+		else if (strcmp(word, "rho") == 0) {
+			addfield("rho", &DumpCustom::pack_rho, DOUBLE);
+		}
 		word = strtok(NULL," \0");
 	}
 }
@@ -492,6 +495,18 @@ void DumpCustom::pack_energy(int n)
 
 	for (int i = 0; i < nselected; i++) {
 		buf[n] = e[selected_list[i]];
+		n += nfields;
+	}
+}
+
+/* ---------------------------------------------------------------------- */
+
+void DumpCustom::pack_rho(int n)
+{
+	double *rho = particle->rho;
+
+	for (int i = 0; i < nselected; i++) {
+		buf[n] = rho[selected_list[i]];
 		n += nfields;
 	}
 }
