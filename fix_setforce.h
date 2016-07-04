@@ -33,6 +33,7 @@ public:
 
  private:
 	double fx, fy, fz;
+	int flag_x, flag_y, flag_z;
 };
 
 }

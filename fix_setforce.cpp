@@ -25,10 +25,25 @@ FixSetForce::FixSetForce(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 	if (narg < 6) error->all(FLERR,"Illegal fix setforce command");
 
 	fx = fy = fz = 0.0;
+	if (arg[3] != NULL){
+		flag_x = 1;
+		fx = atof(arg[3]);
+	}
+	else
+		flag_x = 0;
+	if (arg[4] != NULL){
+		flag_y = 1;
+		fy = atof(arg[4]);
+	}
+	else
+		flag_y = 0;
+	if (arg[5] != NULL){
+		flag_z = 1;
+		fz = atof(arg[5]);
+	}
+	else
+		flag_z = 0;
 
-	fx = atof(arg[3]);
-	fy = atof(arg[4]);
-	fz = atof(arg[5]);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -66,9 +81,12 @@ void FixSetForce::post_force()
 
 	for (int i = 0; i < nlocal; i++) {
 		if (mask[i] & groupbit) {
-			f[i][0] = fx;
-			f[i][1] = fy;
-			f[i][2] = fz;
+			if (flag_x == 1)
+				f[i][0] = fx;
+			if (flag_y == 1)
+				f[i][1] = fy;
+			if (flag_z == 1)
+				f[i][2] = fz;
 		}
 	}
 }
