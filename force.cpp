@@ -118,11 +118,15 @@ void Force::clear()
 	int nall = particle->nlocal + particle->nghost;
 	
 
-	for (int i = 0; i < nall; i++)
-	for (int j = 0; j < 3; j++) {
-		particle->f[i][j] = 0.0;
-		if (particle->torque_flag) particle->torque[i][j] = 0.0;
+	for (int i = 0; i < nall; i++){
+		particle->de[i] = 0.0;
+		particle->drho[i] = 0.0;
+		for (int j = 0; j < 3; j++) {
+			particle->f[i][j] = 0.0;
+			if (particle->torque_flag) particle->torque[i][j] = 0.0;
+		}
 	}
+	
 
 	for (int i = 0; i < npairs; i++) 
 	for (int j = 0; j < 6; j++) {
