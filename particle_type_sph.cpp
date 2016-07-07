@@ -156,6 +156,7 @@ void ParticleTypeSph::data_particle(double *coord, char **values)
 	x[nlocal][1] = coord[1];
 	x[nlocal][2] = coord[2];
 
+
 	//image[nlocal] = imagetmp;
 
 	mask[nlocal] = 1;
@@ -467,6 +468,7 @@ int ParticleTypeSph::unpack_exchange(double *buf)
 	poro[nlocal] = buf[m++];
 	volume[nlocal] = buf[m++];
 	hlocal[nlocal] = buf[m++];
+
 
 	particle->nlocal++;
 	return m;
