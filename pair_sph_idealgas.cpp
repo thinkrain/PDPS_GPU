@@ -89,7 +89,7 @@ void PairSPH_IDEALGAS::compute(int eflag, int vflag)
 
   int *ilist, *jlist, *numneigh, **firstneigh;
   double vxtmp, vytmp, vztmp, imass, jmass, fi, fj, fvisc, ih, q, ihsq;
-  double rsq, tmp, wfd, delVdotDelR, mu, deltaE;
+  double rsq, rij_inv, tmp, wfd, delVdotDelR, mu, deltaE;
   double ci, cj;
 
   if (eflag || vflag)
@@ -142,8 +142,7 @@ void PairSPH_IDEALGAS::compute(int eflag, int vflag)
 		  // initialize density with self-contribution,
 		  for (i = 0; i < nlocal; i++) {
 			  itype = type[i];
-			  imass = mass[itype];  
-
+			  imass = mass[itype];
 			  if (domain->dim == 3) {
 
 				  // Cubic spline kernel, 3d
@@ -155,7 +154,6 @@ void PairSPH_IDEALGAS::compute(int eflag, int vflag)
 				  wf = a2D;
 				  //wf = 0.89 / (h * h);
 			  }
-
 			  rho[i] = imass * wf;
 		  }
 
@@ -168,7 +166,7 @@ void PairSPH_IDEALGAS::compute(int eflag, int vflag)
 			  itype = type[i];
 			  jlist = firstneigh[i];
 			  jnum = numneigh[i];
-			   
+
 			  for (jj = 0; jj < jnum; jj++) {
 				  j = jlist[jj];
 
@@ -179,32 +177,33 @@ void PairSPH_IDEALGAS::compute(int eflag, int vflag)
 				  rsq = delx * delx + dely * dely + delz * delz;
 
 				  if (rsq < cutsq[itype][jtype]) {
-					 q = sqrt(rsq) / h;
+					  q = sqrt(rsq) / h;
 
-					 if (cubic_flag == 1){
-						 if (q < 1)
-							 wf = 1 - 1.5 * q * q + 0.75 * q * q * q;
-						 else
-							 wf = 0.25 * (2 - q) * (2 - q) * (2 - q);
-					 }
-					 else if (quintic_flag == 1)
-						 wf = (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (2 * q + 1);
+					  if (cubic_flag == 1){
+						  if (q < 1)
+							  wf = 1 - 1.5 * q * q + 0.75 * q * q * q;
+						  else
+							  wf = 0.25 * (2 - q) * (2 - q) * (2 - q);
+					  }
+					  else if (quintic_flag == 1)
+						  wf = (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (2 * q + 1);
 
-					 if (domain->dim == 3)
-						 wf = wf * a3D;
-					 else
-						 wf = wf * a2D;
+					  if (domain->dim == 3)
+						  wf = wf * a3D;
+					  else
+						  wf = wf * a2D;
 
 					  rho[i] += mass[jtype] * wf;
 					  rho[j] += mass[itype] * wf;
 				  }
 
 			  }
-   		  }
-		
+		  }
+
 
 	  }
   }
+ 
    
   for (ii = 0; ii < inum; ii++) {
 	  i = ilist[ii];
@@ -236,7 +235,7 @@ void PairSPH_IDEALGAS::compute(int eflag, int vflag)
 
 		  if (rsq < cutsq[itype][jtype]) {
 			  q = sqrt(rsq) / h;
-
+			  rij_inv = 1.0 / sqrt(rsq);
 			  if (cubic_flag == 1){
 				  if (q < 1)
 					  wfd = - 3 * q + 2.25 * q * q;
@@ -271,21 +270,21 @@ void PairSPH_IDEALGAS::compute(int eflag, int vflag)
 			  fpair = -imass * jmass * (fi + fj + fvisc) * wfd;
 			  deltaE = -0.5 * fpair * delVdotDelR;
 
-			  f[i][0] += delx * fpair;
-			  f[i][1] += dely * fpair;
-			  f[i][2] += delz * fpair;
+			  f[i][0] += delx * fpair * rij_inv;
+			  f[i][1] += dely * fpair * rij_inv;
+			  f[i][2] += delz * fpair * rij_inv;
 
 			  // and change in density
 			  drho[i] += jmass * delVdotDelR * wfd;
 
 			  // change in thermal energy
-			  de[i] += deltaE;
+			  de[i] = deltaE;
 
 			  if (newton_pair || j < nlocal) {
-				  f[j][0] -= delx * fpair;
-				  f[j][1] -= dely * fpair;
-				  f[j][2] -= delz * fpair;
-				  de[j] += deltaE;
+				  f[j][0] -= delx * fpair * rij_inv;
+				  f[j][1] -= dely * fpair * rij_inv;
+				  f[j][2] -= delz * fpair * rij_inv;
+				  de[j] = deltaE;
 				  drho[j] += imass * delVdotDelR * wfd;
 			  }
 
@@ -358,7 +357,8 @@ void PairSPH_IDEALGAS::set_coeff(int narg, char **arg)
 
 	if (cubic_flag == 1){
 		a2D = 10.0 / 7.0 / PI / h / h;
-		a3D = 1.0 / PI / h / h / h;
+	//	a3D = 1.0 / PI / h / h / h;
+		a3D = 2.0 / 3.0 / h;
 	}
 	else if (quintic_flag == 1){
 		a2D = 7.0 / 4.0 / PI / h / h;

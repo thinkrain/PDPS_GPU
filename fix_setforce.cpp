@@ -25,19 +25,19 @@ FixSetForce::FixSetForce(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 	if (narg < 6) error->all(FLERR,"Illegal fix setforce command");
 
 	fx = fy = fz = 0.0;
-	if (arg[3] != NULL){
+	if(strcmp(arg[3], "save") != 0){
 		flag_x = 1;
 		fx = atof(arg[3]);
 	}
 	else
 		flag_x = 0;
-	if (arg[4] != NULL){
+	if (strcmp(arg[4], "save") != 0){
 		flag_y = 1;
 		fy = atof(arg[4]);
 	}
 	else
 		flag_y = 0;
-	if (arg[5] != NULL){
+	if (strcmp(arg[5], "save") != 0){
 		flag_z = 1;
 		fz = atof(arg[5]);
 	}
