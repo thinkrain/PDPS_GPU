@@ -51,20 +51,16 @@ void V_Verlet::init()
 void V_Verlet::setup()
 {
 	output->print("PDPS is setting up...\n");
-
 	// setup domain and neighbor list
 	domain->pbc();
 	domain->reset_box();
 	
 	parallel->setup();
-
 	neighbor->setup_cells();
 
 	parallel->exchange();
-
 	particle->lost_check();
 	parallel->borders();
-	
 	neighbor->build();
 	//neighbor->debug();
 	neighbor->nflag = 1;
@@ -104,31 +100,21 @@ void V_Verlet::run(int n)
 
 	// run
 	ntimestep = update->ntimestep;
-	int flag_break = 0;
+
 	// Output initial structure 
+
 	for (int i = 0; i < n; i++) {
 		ntimestep = ++update->ntimestep;
 		ev_set(ntimestep);
 
+
 		// group or region may be dynamic
 		update->dynamic_check();
-
 
 		if (n_pre_integrate) modify->pre_integrate();
 		// first integration of Verlet algorithm
 		modify->initial_integrate();
-		if (procid == 1 && flag_break == 0){
-			for (int m = 0; m < particle->nlocal; m++){
-				if (particle->x[m][0] < -100 || particle->x[m][0] > 100)
-				{
-					printf("after initial break time = %d\n", i);
-					printf("procid = %d\n time = %d\n before iteration x[%d][0] = %f\n", procid, i, m, particle->x[m][0]);
-					flag_break = 1;
-					break;
-				}
 
-			}
-		}
 		if (n_post_integrate) modify->post_integrate();
 
 		// build neighbor
@@ -155,7 +141,6 @@ void V_Verlet::run(int n)
 			parallel->forward_comm();
 			timer->stamp(TIME_COMM);
 		}
-
 		// force computation
 		force->clear();
 		if (n_pre_force) modify->pre_force();
@@ -169,6 +154,7 @@ void V_Verlet::run(int n)
 		// force modifications
 		if (n_post_force) modify->post_force();
 		
+
 		// second integration of Verlet algorithm
 		modify->final_integrate();
 		if (n_end_of_step) modify->end_of_step();

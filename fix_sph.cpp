@@ -13,6 +13,7 @@
 #include "fix_sph.h"
 #include "force.h"
 #include "particle.h"
+#include "parallel.h"
 #include "update.h"
 #define PI 3.1416
 

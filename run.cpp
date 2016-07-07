@@ -9,7 +9,7 @@
 ------------------------------------------------------------------------- */
 
 #include "stdlib.h"
-
+#include "particle.h"
 #include "compute.h"
 #include "force.h"
 #include "integrate.h"
@@ -41,9 +41,7 @@ void Run::command(int narg, char **arg)
 
 	if (update->ntimestep == 0) runflag = 0;
 	else runflag = 1;
-
 	ps->init();
-	
 	update->integrate->setup();     // setup before run
 
 	timer->stamp_start(TIME_LOOP);

@@ -9,7 +9,6 @@
 
 #include "stdlib.h"
 #include "string.h"
-
 #include "domain.h"
 #include "error.h"
 #include "fix_wall_reflect.h"
@@ -31,7 +30,6 @@ enum{BOUND, REGION};
 FixWallReflect::FixWallReflect(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 {
 	if (narg < 6) error->all(FLERR,"Illegal fix wall/reflect command");
-
 	nwalls = 0;
 
 	nlocal_max = 0;
