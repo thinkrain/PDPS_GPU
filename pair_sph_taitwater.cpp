@@ -98,7 +98,7 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
   int *ilist, *jlist, *numneigh, **firstneigh;
   double vxtmp, vytmp, vztmp, imass, jmass, fi, fj, fvisc, q;
   double rsq, rij_inv, tmp, wfd, delVdotDelR, mu, deltaE;
-
+ 
   if (eflag || vflag)
     ev_setup(eflag, vflag);
 //  else
@@ -116,9 +116,7 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
   int nlocal = particle->nlocal;
   double wf;
 //  int newton_pair = force->newton_pair;
-
   // check consistency of pair coefficients
-
   if (first) {
     for (i = 1; i <= particle->ntypes; i++) {
       for (j = 1; i <= particle->ntypes; i++) {
@@ -165,8 +163,6 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
 			  if (!(mask[i]&bcbit))
 				rho[i] = imass * wf;
 		  }
-
-
 		  // add density at each particle via kernel function overlap
 		  for (ii = 0; ii < inum; ii++) {
 			  i = ilist[ii];
@@ -211,8 +207,65 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
 			  }
    		  }
 		
+	  //  density correction phase
+		  for (i = 0; i < 0; i++){
+			  itype = type[i];
+			  xtmp = x[i][0];
+			  ytmp = x[i][1];
+			  ztmp = x[i][2];	//  if this is low density at boundary
+
+			if (domain->dim == 3)
+				drho[i] = a3D / rho[i];
+			else
+				drho[i] = a2D / rho[i];
+			jlist = firstneigh[i];
+			jnum = numneigh[i];
+			for (jj = 0; jj < jnum; jj++) {
+				j = jlist[jj];
+				jtype = type[j];
+				delx = xtmp - x[j][0];
+				dely = ytmp - x[j][1];
+				delz = ztmp - x[j][2];
+				rsq = delx * delx + dely * dely + delz * delz;
+
+				if (rsq < cutsq[itype][jtype]) {
+					q = sqrt(rsq) / h;
+
+					if (cubic_flag == 1){
+						if (q < 1)
+							wf = 1 - 1.5 * q * q + 0.75 * q * q * q;
+						else
+							wf = 0.25 * (2 - q) * (2 - q) * (2 - q);
+					}
+					else if (quintic_flag == 1)
+						wf = (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (2 * q + 1);
+
+					if (domain->dim == 3)
+						wf = wf * a3D;
+					else
+						wf = wf * a2D;
+					if (!(mask[i] & bcbit))
+						drho[i] += mass[jtype] * wf / rho[j];
+					if (!(mask[j] & bcbit))
+						drho[j] += mass[itype] * wf / rho[i];
+				}
+					  
+			}
+			//	use drho[i] to store new rho[i] temporarily
+
+		  }
+
+		  for (i = 0; i < nlocal; i++){
+			//  rho[i] = rho[i] / drho[i];
+			  itype = type[i];
+			  if (rho[i] < rho0[itype] * 0.95)
+			  rho[i] = rho0[itype];
+		  }
 
 	  }
+
+	
+
   }
 
   for (ii = 0; ii < inum; ii++) {
@@ -366,7 +419,7 @@ void PairSPH_TAITWATER::set_coeff(int narg, char **arg)
 		B[j] = B_one;
 		viscosity[i][j] = viscosity_one;
 		//printf("setting cut[%d][%d] = %f\n", i, j, cut_one);
-		cut[i][j] = cut_one;
+		cut[i][j] = 2 * cut_one;
 		cutsq[i][j] = cut[i][j] * cut[i][j];
 		setflag[i][j] = 1;
 
