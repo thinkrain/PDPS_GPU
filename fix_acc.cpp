@@ -11,7 +11,6 @@
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
-
 #include "domain.h"
 #include "error.h"
 #include "fix_acc.h"
@@ -52,6 +51,7 @@ FixAcc::FixAcc(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 		}
 		else error->all(FLERR, "Illegal command option");
 	}
+
 }
 
 /* ---------------------------------------------------------------------- */

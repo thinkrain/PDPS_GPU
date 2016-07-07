@@ -9,7 +9,7 @@
 
 #include "stdlib.h"
 #include "string.h"
-
+#include "parallel.h"
 #include "domain.h"
 #include "dump_custom.h"
 #include "error.h"
@@ -160,6 +160,9 @@ void DumpCustom::parse_field(char *str)
 			addfield("ID",&DumpCustom::pack_id,INT);
 			//field2index[nfield] = 0;
 		} 
+		else if (strcmp(word, "procid") == 0) {
+			addfield("Procid", &DumpCustom::pack_procid, DOUBLE);
+		}
 		else if (strcmp(word,"fx") == 0) {
 			addfield("Fx",&DumpCustom::pack_fx,DOUBLE);
 		}
@@ -507,6 +510,18 @@ void DumpCustom::pack_rho(int n)
 
 	for (int i = 0; i < nselected; i++) {
 		buf[n] = rho[selected_list[i]];
+		n += nfields;
+	}
+}
+
+/* ---------------------------------------------------------------------- */
+
+void DumpCustom::pack_procid(int n)
+{
+	int procid = parallel->procid;
+
+	for (int i = 0; i < nselected; i++) {
+		buf[n] = procid;
 		n += nfields;
 	}
 }
