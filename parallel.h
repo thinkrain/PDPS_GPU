@@ -42,6 +42,8 @@ public:
 
 	void forward_comm(int dummy = 0);   // forward comm of x and v
 	void reverse_comm();                // reverse comm of forces
+	void reverse_comm_pair(class Pair *);
+	void forward_comm_pair(class Pair *);
 
 protected:
 	int style; 

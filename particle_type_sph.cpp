@@ -9,7 +9,7 @@
 
 #include "stdlib.h"
 #include "string.h"
-
+#include "update.h"
 #include "domain.h"
 #include "error.h"
 #include "memory.h"
@@ -751,6 +751,11 @@ int ParticleTypeSph::pack_reverse(int n, int first, double *buf)
 		buf[m++] = drho[i];
 		buf[m++] = de[i];
 	}
+//	if (update->ntimestep == 236){
+//		printf("timestep = %d procid = %d fisrt = %d, last = %d, m = %d, buf[80] = %f\n", update->ntimestep, parallel->procid, first, last, m, buf[80]);
+	//	printf("f[28][0] = %f\n", particle->f[28][0]);
+//	}
+		
 	return m;
 }
 
@@ -764,6 +769,8 @@ void ParticleTypeSph::unpack_reverse(int n, int *list, double *buf)
 	for (i = 0; i < n; i++) {
 		j = list[i];
 		f[j][0] += buf[m++];
+//		if (f[j][0] > 1000000 || f[j][0] < -1000000)
+//			printf("procid = %d timestep = %d tag[%d] = %d buf[%d] = %f\n", parallel->procid, update->ntimestep, j, particle->tag[j], m - 1, buf[m - 1]);
 		f[j][1] += buf[m++];
 		f[j][2] += buf[m++];
 		drho[j] += buf[m++];

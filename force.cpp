@@ -119,6 +119,7 @@ void Force::clear()
 	
 
 	for (int i = 0; i < nall; i++){
+		particle->rho[i] = 0.0;
 		particle->de[i] = 0.0;
 		particle->drho[i] = 0.0;
 		for (int j = 0; j < 3; j++) {

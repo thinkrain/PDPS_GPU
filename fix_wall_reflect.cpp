@@ -17,7 +17,6 @@
 #include "particle.h" 
 #include "psmath.h"
 #include "update.h"
-
 using namespace PDPS_NS;
 using namespace FixConst;
 using namespace PsMath_NS;

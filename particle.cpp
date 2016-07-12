@@ -122,7 +122,7 @@ void Particle::init()
 		error->all(FLERR,"No particle has been created");
 	}
 
-	ptype->init();
+  	ptype->init();
 }
 
 /* ---------------------------------------------------------------------- */
@@ -229,6 +229,7 @@ void Particle::set_mass(int narg, char** arg)
 		}
 	}
 	else mass[tid] = atof(arg[1]);            // store mass
+
 }
 
 /* ----------------------------------------------------------------------
@@ -334,9 +335,6 @@ void Particle::set_energy(int narg, char** arg)
 //	tid = atoi(arg[0]);
 //	if (tid < 1) error->all(FLERR, "Illegal particle type");
 	// Need to tell if box exists
-	if (e == NULL) {
-		allocate_type_arrays();
-	}
 	int gid = group->find_group(arg[0]);
 	if (gid == -1) error->all(FLERR, "Cannot find the group id");
 	int groupbit = group->bitmask[gid];
@@ -353,16 +351,12 @@ Set rho for each type of particle
 void Particle::set_rho(int narg, char** arg)
 {
 	int tid;
-
 	//	if (atomic_flag == 1) error->all(FLERR, "Illegal particle style to call density command");
 	if (narg != 2) error->all(FLERR, "Illegal density command");
 
 	//	tid = atoi(arg[0]);
 	//	if (tid < 1) error->all(FLERR, "Illegal particle type");
 	// Need to tell if box exists
-	if (rho == NULL) {
-		allocate_type_arrays();
-	}
 	int gid = group->find_group(arg[0]);
 	if (gid == -1) error->all(FLERR, "Cannot find the group id");
 	int groupbit = group->bitmask[gid];

@@ -46,7 +46,10 @@ public:
 	virtual void init_one(int, int) {}
 	virtual void set_style(int, char **) = 0;
 	virtual void set_coeff(int, char **) = 0;
-
+	virtual int pack_reverse_comm(int, int, double *) { return 0; }
+	virtual void unpack_reverse_comm(int, int *, double *) {}
+	virtual int pack_forward_comm(int, int *, double *) { return 0; }
+	virtual void unpack_forward_comm(int, int, double *) {}
 	// energy (has to be public, so that pair_style can call
 	void ev_tally(int, int, int, int, double, double, double,
                 double, double, double);

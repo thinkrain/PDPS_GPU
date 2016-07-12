@@ -71,9 +71,7 @@ void V_Verlet::setup()
 	force->clear();
 	if (modify->n_pre_force) modify->pre_force();
 	force->compute(eflag,vflag);
-
 	parallel->reverse_comm();
-
 	// output initial structure
 	
 	modify->setup();
@@ -148,7 +146,11 @@ void V_Verlet::run(int n)
 		timer->stamp();
 		force->compute(eflag,vflag);
 		timer->stamp(TIME_PAIR);
+//		if (parallel->procid == 1 && update->ntimestep == 236)
+//			printf("before reverse tag[24] = %d f[24] = %f\n", particle->tag[24], particle->f[24][0]);
 		parallel->reverse_comm();
+		if (parallel->procid == 1 && update->ntimestep == 236)
+			printf("after reverse tag[24] = %d f[24] = %f\n", particle->tag[24], particle->f[24][0]);
 		timer->stamp(TIME_COMM);
 
 		// force modifications

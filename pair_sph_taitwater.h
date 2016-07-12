@@ -40,7 +40,7 @@ protected:
 	class RanMars *random;
 	double *rho0, *soundspeed, *B;
 	double **viscosity;
-	int first, nstep;
+	int first;
 	int cubic_flag, quintic_flag;
 	int bcbit;
 	void allocate();

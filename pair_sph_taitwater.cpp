@@ -23,7 +23,7 @@
 #include "random_mars.h"
 #include "update.h"
 #include "group.h"
-
+#include "mpi.h"
 using namespace PDPS_NS;
 
 
@@ -98,7 +98,8 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
   int *ilist, *jlist, *numneigh, **firstneigh;
   double vxtmp, vytmp, vztmp, imass, jmass, fi, fj, fvisc, q;
   double rsq, rij_inv, tmp, wfd, delVdotDelR, mu, deltaE;
- 
+  MPI_Request request;
+  MPI_Status status;
   if (eflag || vflag)
     ev_setup(eflag, vflag);
 //  else
@@ -140,133 +141,12 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
   firstneigh = neighbor->neighlist->firstneigh;
 
   // loop over neighbors of my particles
-
-  if (nstep != 0) {
-	  if ((update->ntimestep % nstep) == 0) {
-
-		  // initialize density with self-contribution,
-		  for (i = 0; i < nlocal; i++) {
-			  itype = type[i];
-			  imass = mass[itype];
-
-			  if (domain->dim == 3) {
-
-				  // Cubic spline kernel, 3d
-				  wf = a3D;
-			  }
-			  else {
-
-				  // Cubic spline kernel, 2d
-				  wf = a2D;
-				  //wf = 0.89 / (h * h);
-			  }
-			  if (!(mask[i]&bcbit))
-				rho[i] = imass * wf;
-		  }
-		  // add density at each particle via kernel function overlap
-		  for (ii = 0; ii < inum; ii++) {
-			  i = ilist[ii];
-			  xtmp = x[i][0];
-			  ytmp = x[i][1];
-			  ztmp = x[i][2];
-			  itype = type[i];
-			  jlist = firstneigh[i];
-			  jnum = numneigh[i];
-			   
-			  for (jj = 0; jj < jnum; jj++) {
-				  j = jlist[jj];
-
-				  jtype = type[j];
-				  delx = xtmp - x[j][0];
-				  dely = ytmp - x[j][1];
-				  delz = ztmp - x[j][2];
-				  rsq = delx * delx + dely * dely + delz * delz;
-
-				  if (rsq < cutsq[itype][jtype]) {
-					  q = sqrt(rsq) / h;
-
-					  if (cubic_flag == 1){
-						  if (q < 1)
-							  wf = 1 - 1.5 * q * q + 0.75 * q * q * q;
-						  else
-							  wf = 0.25 * (2 - q) * (2 - q) * (2 - q);
-					  }
-					  else if (quintic_flag == 1)
-						  wf = (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (2 * q + 1);
-
-					  if (domain->dim == 3)
-						  wf = wf * a3D;
-					  else
-						  wf = wf * a2D;
-					  if (!(mask[i] & bcbit))
-						  rho[i] += mass[jtype] * wf;
-					  if (!(mask[j] & bcbit))
-						  rho[j] += mass[itype] * wf;
-				  }
-
-			  }
-   		  }
-		
-	  //  density correction phase
-		  for (i = 0; i < 0; i++){
-			  itype = type[i];
-			  xtmp = x[i][0];
-			  ytmp = x[i][1];
-			  ztmp = x[i][2];	//  if this is low density at boundary
-
-			if (domain->dim == 3)
-				drho[i] = a3D / rho[i];
-			else
-				drho[i] = a2D / rho[i];
-			jlist = firstneigh[i];
-			jnum = numneigh[i];
-			for (jj = 0; jj < jnum; jj++) {
-				j = jlist[jj];
-				jtype = type[j];
-				delx = xtmp - x[j][0];
-				dely = ytmp - x[j][1];
-				delz = ztmp - x[j][2];
-				rsq = delx * delx + dely * dely + delz * delz;
-
-				if (rsq < cutsq[itype][jtype]) {
-					q = sqrt(rsq) / h;
-
-					if (cubic_flag == 1){
-						if (q < 1)
-							wf = 1 - 1.5 * q * q + 0.75 * q * q * q;
-						else
-							wf = 0.25 * (2 - q) * (2 - q) * (2 - q);
-					}
-					else if (quintic_flag == 1)
-						wf = (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (2 * q + 1);
-
-					if (domain->dim == 3)
-						wf = wf * a3D;
-					else
-						wf = wf * a2D;
-					if (!(mask[i] & bcbit))
-						drho[i] += mass[jtype] * wf / rho[j];
-					if (!(mask[j] & bcbit))
-						drho[j] += mass[itype] * wf / rho[i];
-				}
-					  
-			}
-			//	use drho[i] to store new rho[i] temporarily
-
-		  }
-
-		  for (i = 0; i < nlocal; i++){
-			//  rho[i] = rho[i] / drho[i];
-			  itype = type[i];
-			  if (rho[i] < rho0[itype] * 0.95)
-			  rho[i] = rho0[itype];
-		  }
-
-	  }
-
-	
-
-  }
+ // for (i = 0; i < nlocal + particle->nghost; i++){
+//	  if (f[i][0] > 1000000 || f[i][0] < -1000000)
+//		  printf("before pair procid = %d timestep = %d tag[%d] = %d f[%d] = %f\n", parallel->procid, update->ntimestep, i, particle->tag[i], i, f[i][0]);
+//  }
+ // if (update->ntimestep == 236 && parallel->procid == 0)
+//	  printf("236 ghost = %d tag[28] = %d f[28] = %f\n", particle->nghost, particle->tag[28], f[28][0]);
 
   for (ii = 0; ii < inum; ii++) {
     i = ilist[ii];
@@ -281,7 +161,7 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
     jnum = numneigh[i];
 
     imass = mass[itype];
-
+	
     // compute pressure of particle i with Tait EOS
     tmp = rho[i] / rho0[itype];
     fi = tmp * tmp * tmp;
@@ -298,6 +178,10 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
       jtype = type[j];
       jmass = mass[jtype];
 
+//	  if (i == 0){
+//		  printf("procid = %d rho[%d] = %f rho[%d] = %f\n", parallel->procid, i, rho[i], j, rho[j]);
+//	  }
+//	  printf("before compute procid = %d i = %d\n itype = %d jtype = %d imass = %f jmass = %f mass[itype] = %f mass[jtype] = %f\n", parallel->procid, i, itype, jtype, imass, jmass, mass[itype], mass[jtype]);
       if (rsq < cutsq[itype][jtype]) {
 
 		  q = sqrt(rsq) / h;
@@ -320,6 +204,7 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
         tmp = rho[j] / rho0[jtype];
         fj = tmp * tmp * tmp;
         fj = B[jtype] * (fj * fj * tmp - 1.0) / (rho[j] * rho[j]);
+	//	printf("procid = %d, rho[%d] = %f, rho0[%d] = %f\n", parallel->procid, j, rho[j], jtype, rho0[jtype]);
         // dot product of velocity delta and distance vector
         delVdotDelR = delx * (vxtmp - v[j][0]) + dely * (vytmp - v[j][1])
             + delz * (vztmp - v[j][2]);
@@ -337,12 +222,21 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
 
         // total pair force & thermal energy increment
         fpair = -imass * jmass * (fi + fj + fvisc) * wfd;
+//		if (particle->tag[i] == 37 && update->ntimestep == 236)
+//			printf("after compute timestep = %d procid = %d  i = %d tag[i] = %d fpair = %f\n fi = %f fj = %f fvisc = %f wfd = %f\n", update->ntimestep, parallel->procid, i, particle->tag[i], fpair, fi, fj, fvisc, wfd);
+//		if (particle->tag[i] == 37 && update->ntimestep == 237)
+//			printf("after compute timestep = %d procid = %d  i = %d tag[i] = %d fpair = %f\n fi = %f fj = %f fvisc = %f wfd = %f\n", update->ntimestep, parallel->procid, i, particle->tag[i], fpair, fi, fj, fvisc, wfd);
+//		if (i == 0)
+//			printf("after compute procid = %d  i = %d fpair = %f\n fi = %f fj = %f fvisc = %f wfd = %f\n", parallel->procid, i, fpair, fi, fj, fvisc, wfd);
         deltaE = -0.5 * fpair * delVdotDelR;
 
 		f[i][0] += delx * fpair * rij_inv;
 		f[i][1] += dely * fpair * rij_inv;
 		f[i][2] += delz * fpair * rij_inv;
-
+//		if (particle->tag[i] == 37 && update->ntimestep == 236)
+//			printf("after compute timestep = %d procid = %d  i = %d tag[i] = %d delx = %f fpair = %f rij_inv = %f\n", update->ntimestep, parallel->procid, i, particle->tag[i], delx, fpair, rij_inv);
+//		if (particle->tag[i] == 37 && update->ntimestep == 237)
+//			printf("after compute timestep = %d procid = %d  i = %d tag[i] = %d delx = %f fpair = %f rij_inv = %f\n", update->ntimestep, parallel->procid, i, particle->tag[i], delx, fpair, rij_inv);
         // and change in density
         drho[i] += jmass * delVdotDelR * wfd;
 
@@ -361,9 +255,16 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
           ev_tally(i, j, nlocal, newton_pair, 0.0, 0.0, fpair, delx, dely, delz);
       }
     }
-  }
 
-//  if (vflag_fdotr) virial_fdotr_compute();
+  }
+//  for (i = 0; i < nlocal + particle->nghost; i++){
+//	  if (f[i][0] > 1000000 || f[i][0] < -1000000)
+//		  printf("after pair procid = %d timestep = %d tag[%d] = %d f[%d] = %f\n", parallel->procid, update->ntimestep, i, particle->tag[i], i, f[i][0]);
+//  }
+ // if (vflag_fdotr) virial_fdotr_compute();
+ //for (i = 0; i < nlocal; i++)
+//	  printf("f[%d] = %f delx = %f pair = %f rij_inv = %f \n", i, f[i][0], delx, fpair, rij_inv);
+ // printf("procid = %d\n", parallel->procid);
 }
 
 
@@ -382,9 +283,8 @@ void PairSPH_TAITWATER::set_style(int narg, char **arg)
 		quintic_flag = 1;
 	else
 		error->all(FLERR, "Wrong Kernel function");
-	nstep = atoi(arg[2]);
-	int gid = group->find_group(arg[3]);
-	bcbit = group->bitmask[gid];
+
+
 }
 
 /* ----------------------------------------------------------------------

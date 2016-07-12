@@ -1149,6 +1149,9 @@ void Parallel::reverse_comm()
 				if (size_reverse_recv[iswap])
 					MPI_Irecv(buf_recv,size_reverse_recv[iswap],MPI_DOUBLE,
 						sendproc[iswap],0,mworld,&request);
+//				if (parallel->procid == 0 && update->ntimestep == 236){
+//					printf("goast = %d timestep = %d procid = %d recvnum[iswap] = %d, firstrecv[iswap] = %d, buf[80] = %f f[28] = %f\n", particle->nghost, update->ntimestep, parallel->procid, recvnum[iswap], firstrecv[iswap], buf_send[80], particle->f[28][0]);
+//				}
 				n = ptype->pack_reverse(recvnum[iswap],firstrecv[iswap],buf_send);
 				if (n) MPI_Send(buf_send,n,MPI_DOUBLE,recvproc[iswap],0,mworld);
 				if (size_reverse_recv[iswap]) MPI_Wait(&request,&status);
@@ -1166,5 +1169,81 @@ void Parallel::reverse_comm()
 				ptype->unpack_reverse(sendnum[iswap],sendlist[iswap],buf_send);
 			} 
 		} // if (sendproc[iswap] = procid)
+	} // for (int iswap = nswap-1; iswap >= 0; iswap--)
+}
+
+/* ----------------------------------------------------------------------
+Reverse communication of rho on particles every timestep
+other per-particle attributes may also be sent via pack/unpack routines
+------------------------------------------------------------------------- */
+
+void Parallel::reverse_comm_pair(Pair *pair)
+{
+	int n;
+	MPI_Request request;
+	MPI_Status status;
+	double *buf;
+
+	// exchange data with another proc
+	// if other proc is self, just copy
+	// if comm_f_only set, exchange or copy directly from f, don't pack
+	for (int iswap = nswap - 1; iswap >= 0; iswap--) {
+
+		if (sendproc[iswap] != procid) {
+
+			if (sendnum[iswap])
+				MPI_Irecv(buf_recv, sendnum[iswap], MPI_DOUBLE, sendproc[iswap], 0, mworld, &request);
+			n = pair->pack_reverse_comm(recvnum[iswap], firstrecv[iswap], buf_send);
+			if (n)
+			{
+				MPI_Send(buf_send, n, MPI_DOUBLE, recvproc[iswap], 0, mworld);
+			}
+			if (sendnum[iswap])
+				MPI_Wait(&request, &status);
+			pair->unpack_reverse_comm(sendnum[iswap], sendlist[iswap], buf_recv);
+		} // if (sendproc[iswap] != procid)
+		else{
+			n = pair->pack_reverse_comm(recvnum[iswap], firstrecv[iswap], buf_send);
+			pair->unpack_reverse_comm(sendnum[iswap], sendlist[iswap], buf_send);
+		}
+
+	} // for (int iswap = nswap-1; iswap >= 0; iswap--)
+}
+
+/* ----------------------------------------------------------------------
+Forward communication of rho on particles every timestep
+other per-particle attributes may also be sent via pack/unpack routines
+------------------------------------------------------------------------- */
+
+void Parallel::forward_comm_pair(Pair *pair)
+{
+	int n;
+	MPI_Request request;
+	MPI_Status status;
+	double *buf;
+
+	// exchange data with another proc
+	// if other proc is self, just copy
+	// if comm_f_only set, exchange or copy directly from f, don't pack
+	for (int iswap = nswap - 1; iswap >= 0; iswap--) {
+
+		if (sendproc[iswap] != procid) {
+
+			if (recvnum[iswap])
+				MPI_Irecv(buf_recv, recvnum[iswap], MPI_DOUBLE, recvproc[iswap], 0, mworld, &request);
+			n = pair->pack_forward_comm(sendnum[iswap], sendlist[iswap], buf_send);
+			if (n)
+			{
+				MPI_Send(buf_send, n, MPI_DOUBLE, sendproc[iswap], 0, mworld);
+			}
+			if (recvnum[iswap])
+				MPI_Wait(&request, &status);
+			pair->unpack_forward_comm(recvnum[iswap], firstrecv[iswap], buf_recv);
+		} // if (sendproc[iswap] != procid)
+		else{
+			n = pair->pack_forward_comm(sendnum[iswap], sendlist[iswap], buf_send);
+			pair->unpack_forward_comm(recvnum[iswap], firstrecv[iswap], buf_send);
+		}
+
 	} // for (int iswap = nswap-1; iswap >= 0; iswap--)
 }

@@ -30,13 +30,20 @@ namespace PDPS_NS {
 		void set_coeff(int, char **);
 		void init_one(int, int);
 		double single(int, int, int, int, double, double, double, double &);
-		int pack_forward_comm(int, int *, double *, int, int *);
+		int pack_reverse_comm(int, int, double *);
+		void unpack_reverse_comm(int, int *, double *);
+		int pack_forward_comm(int, int *, double *);
 		void unpack_forward_comm(int, int, double *);
 
 	protected:
 		int nstep, first;
-		double **cutr, **cutrsq;
 		void allocate();
+		double a2D, a3D, h;
+
+		double *rho0, *soundspeed, *B;
+
+		int cubic_flag, quintic_flag;
+		int bcbit;
 	};
 
 }

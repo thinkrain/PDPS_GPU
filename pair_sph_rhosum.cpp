@@ -28,15 +28,19 @@ using namespace PDPS_NS;
 
 #define DELTA 1
 #define EPSILON 1.0e-10
-
+#define PI 3.1416
 /* ---------------------------------------------------------------------- */
 
 PairSPH_RHOSUM::PairSPH_RHOSUM(PDPS *ps) : Pair(ps)
 {
 	first = 1;
+	newton_pair = 1;
 	allocated = 0;
-	cutr = NULL;
-	cutrsq = NULL;
+	cubic_flag = 0;
+	quintic_flag = 0;
+	h = 0.0;
+	cut = NULL;
+	cutsq = NULL;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -45,9 +49,9 @@ PairSPH_RHOSUM::~PairSPH_RHOSUM()
 {
 	if (allocated) {
 		memory->destroy(setflag);
-		memory->destroy(cutrsq);
-
-		memory->destroy(cutr);
+		memory->destroy(cutsq);
+		memory->destroy(rho0);
+		memory->destroy(cut);
 
 	}
 
@@ -64,9 +68,9 @@ void PairSPH_RHOSUM::allocate()
 	for (int i = 1; i <= n; i++)
 	for (int j = i; j <= n; j++)
 		setflag[i][j] = 0;
-	memory->create(cutrsq, n + 1, n + 1, "pair:cutrsq");
-
-	memory->create(cutr, n + 1, n + 1, "pair:cutr");
+	memory->create(cutsq, n + 1, n + 1, "pair:cutsq");
+	memory->create(rho0, n + 1, "pair:rho0");
+	memory->create(cut, n + 1, n + 1, "pair:cut");
 
 
 }
@@ -77,34 +81,41 @@ Compute force for all paritcles
 
 void PairSPH_RHOSUM::compute(int eflag, int vflag)
 {
-	int i, j, ii, jj, jnum, itype, jtype;
-	double xtmp, ytmp, ztmp, delx, dely, delz;
-	double rsq, imass, h, ih, ihsq;
-	int *jlist;
-	double wf;
-	// neighbor list variables
-	int inum, *ilist, *numneigh, **firstneigh;
+	int i, j, ii, jj, inum, jnum, itype, jtype;
+	double xtmp, ytmp, ztmp, delx, dely, delz, fpair;
 
+	int *ilist, *jlist, *numneigh, **firstneigh;
+	double vxtmp, vytmp, vztmp, imass, jmass, fi, fj, fvisc, q;
+	double rsq, rij_inv, tmp, wfd, delVdotDelR, mu, deltaE;
+	MPI_Request request;
+	MPI_Status status;
 	if (eflag || vflag)
 		ev_setup(eflag, vflag);
+	//  else
+	//    evflag = vflag_fdotr = 0;
 
-
+	double **v = particle->vest;
 	double **x = particle->x;
+	double **f = particle->f;
 	double *rho = particle->rho;
-	int *type = particle->type;
 	double *mass = particle->mass;
-
+	double *de = particle->de;
+	double *drho = particle->drho;
+	int *type = particle->type;
+	int *mask = particle->mask;
+	int nlocal = particle->nlocal;
+	double wf;
+	//  int newton_pair = force->newton_pair;
 	// check consistency of pair coefficients
-
 	if (first) {
 		for (i = 1; i <= particle->ntypes; i++) {
 			for (j = 1; i <= particle->ntypes; i++) {
-				if (cutrsq[i][j] > 0.0) {
+				if (cutsq[i][j] > 1.e-32) {
 					if (!setflag[i][i] || !setflag[j][j]) {
 						if (parallel->procid == 0) {
 							printf(
-								"SPH particle types %d and %d interact, but not all of their single particle properties are set.\n",
-								i, j);
+								"SPH particle types %d and %d interact with cutoff=%g, but not all of their single particle properties are set.\n",
+								i, j, sqrt(cutsq[i][j]));
 						}
 					}
 				}
@@ -118,98 +129,166 @@ void PairSPH_RHOSUM::compute(int eflag, int vflag)
 	numneigh = neighbor->neighlist->numneigh;
 	firstneigh = neighbor->neighlist->firstneigh;
 
-	// recompute density
-	// we use a full neighborlist here
+	// loop over neighbors of my particles
 
-	if (nstep != 0) {
-		if ((update->ntimestep % nstep) == 0) {
+	if ((update->ntimestep % nstep) == 0) {
 
-			// initialize density with self-contribution,
-			for (ii = 0; ii < inum; ii++) {
-				i = ilist[ii];
-				itype = type[i];
-				imass = mass[itype];
+		// initialize density with self-contribution,
+		for (i = 0; i < nlocal; i++) {
+			itype = type[i];
+			imass = mass[itype];
 
-				h = cutr[itype][itype];
-				if (domain->dim == 3) {
-					/*
-					// Lucy kernel, 3d
-					wf = 2.0889086280811262819e0 / (h * h * h);
-					*/
+			if (domain->dim == 3) {
 
-					// quadric kernel, 3d
-					wf = 2.1541870227086614782 / (h * h * h);
-				}
-				else {
-					/*
-					// Lucy kernel, 2d
-					wf = 1.5915494309189533576e0 / (h * h);
-					*/
-
-					// quadric kernel, 2d
-					wf = 1.5915494309189533576e0 / (h * h);
-				}
-
-				rho[i] = imass * wf;
+				// Cubic spline kernel, 3d
+				wf = a3D;
 			}
+			else {
 
-			// add density at each particle via kernel function overlap
-			for (ii = 0; ii < inum; ii++) {
-				i = ilist[ii];
-				xtmp = x[i][0];
-				ytmp = x[i][1];
-				ztmp = x[i][2];
-				itype = type[i];
-				jlist = firstneigh[i];
-				jnum = numneigh[i];
+				// Cubic spline kernel, 2d
+				wf = a2D;
+				//wf = 0.89 / (h * h);
+			}
+			rho[i] += imass * wf;
+		}
+		//MPI_Wait;
+		//  MPI_Wait(& request, &status);
+		// add density at each particle via kernel function overlap
+		for (ii = 0; ii < inum; ii++) {
+			i = ilist[ii];
+			xtmp = x[i][0];
+			ytmp = x[i][1];
+			ztmp = x[i][2];
+			itype = type[i];
+			jlist = firstneigh[i];
+			jnum = numneigh[i];
+			//			if (parallel->procid == 0){
+			//				printf("inum = %d\n", inum);
+			//				printf("x[%d] = %f, x[%d] = %f \n numneigh[%d] == %d\n", i, x[i][0], i, x[i][1], i, numneigh[i]);
+			//				for (jj = 0; jj < jnum; jj++){
+			//					j = jlist[jj];
+			//					printf("%d neighbor[%d] = %d rho[%d] = %f\n x[%d] = %f \n y[%d] = %f \n", i, jj, j, j, rho[j], j, x[j][0], j, x[j][1]);
+			//				}
+			//		}
 
-				for (jj = 0; jj < jnum; jj++) {
-					j = jlist[jj];
+			for (jj = 0; jj < jnum; jj++) {
+				j = jlist[jj];
 
-					jtype = type[j];
-					delx = xtmp - x[j][0];
-					dely = ytmp - x[j][1];
-					delz = ztmp - x[j][2];
-					rsq = delx * delx + dely * dely + delz * delz;
+				jtype = type[j];
+				delx = xtmp - x[j][0];
+				dely = ytmp - x[j][1];
+				delz = ztmp - x[j][2];
+				rsq = delx * delx + dely * dely + delz * delz;
 
-					if (rsq < cutrsq[itype][jtype]) {
-						h = cutr[itype][jtype];
-						ih = 1.0 / h;
-						ihsq = ih * ih;
+				if (rsq < cutsq[itype][jtype]) {
+					q = sqrt(rsq) / h;
 
-						if (domain->dim == 3) {
-							/*
-							// Lucy kernel, 3d
-							r = sqrt(rsq);
-							wf = (h - r) * ihsq;
-							wf =  2.0889086280811262819e0 * (h + 3. * r) * wf * wf * wf * ih;
-							*/
-
-							// quadric kernel, 3d
-							wf = 1.0 - rsq * ihsq;
-							wf = wf * wf;
-							wf = wf * wf;
-							wf = 2.1541870227086614782e0 * wf * ihsq * ih;
-						}
-						else {
-							// Lucy kernel, 2d
-							//r = sqrt(rsq);
-							//wf = (h - r) * ihsq;
-							//wf = 1.5915494309189533576e0 * (h + 3. * r) * wf * wf * wf;
-
-							// quadric kernel, 2d
-							wf = 1.0 - rsq * ihsq;
-							wf = wf * wf;
-							wf = wf * wf;
-							wf = 1.5915494309189533576e0 * wf * ihsq;
-						}
-
-						rho[i] += mass[jtype] * wf;
+					if (cubic_flag == 1){
+						if (q < 1)
+							wf = 1 - 1.5 * q * q + 0.75 * q * q * q;
+						else
+							wf = 0.25 * (2 - q) * (2 - q) * (2 - q);
 					}
+					else if (quintic_flag == 1)
+						wf = (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (2 * q + 1);
+
+					if (domain->dim == 3)
+						wf = wf * a3D;
+					else
+						wf = wf * a2D;
+
+					rho[i] += mass[jtype] * wf;
+					//				if (particle->tag[i] == 3 && parallel->procid == 1){
+					//						printf("3I timestep = %d\n rho[3] = %f\n procid = %d\n numneigh[3] = %d\n i = %d j = %d\n", update->ntimestep, rho[i], parallel->procid, numneigh[i], i, j);
+					//					}
+
+					rho[j] += mass[itype] * wf;
+					//				if (particle->tag[j] == 3 && parallel->procid == 1){
+					//					printf("3J timestep = %d\n rho[3] = %f\n procid = %d\n numneigh[3] = %d\n i = %d j = %d\n", update->ntimestep, rho[j], parallel->procid, numneigh[i], i, j);
+					//				}
+
 
 				}
+
 			}
 		}
+		parallel->reverse_comm_pair(this);
+	//	if (update->ntimestep == 236 && parallel->procid == 0)
+	//		printf("before borders 236 ghost = %d tag[28] = %d f[28] = %f\n", particle->nghost, particle->tag[28], particle->f[28][0]);
+	////	parallel->borders();
+				  for (i = 0; i < nlocal; i++){
+					  //rho[i] = rho[i] / drho[i];
+					  itype = type[i];
+					  if (rho[i] < rho0[itype] * 0.95)
+					  rho[i] = rho0[itype];
+					}
+		parallel->forward_comm_pair(this);
+	//	if (update->ntimestep == 236 && parallel->procid == 0)
+	//		printf("after borders 236 ghost = %d tag[28] = %d f[28] = %f\n", particle->nghost, particle->tag[28], particle->f[28][0]);
+		//	  if (update->ntimestep > 90){
+		//		  for (i = 0; i < nlocal; i++){
+		//			  if (particle->tag[i] == 3999)
+		//				  printf("timestep = %d\n rho[4000] = %f\n procid = %d\n numneigh[4000] = %d\n", update->ntimestep, rho[i], parallel->procid, numneigh[i]);
+		//		  }
+		//	  }
+
+
+
+		//  density correction phase
+		for (i = 0; i < 0; i++){
+			itype = type[i];
+			xtmp = x[i][0];
+			ytmp = x[i][1];
+			ztmp = x[i][2];	//  if this is low density at boundary
+
+			if (domain->dim == 3)
+				drho[i] = a3D / rho[i];
+			else
+				drho[i] = a2D / rho[i];
+			jlist = firstneigh[i];
+			jnum = numneigh[i];
+			for (jj = 0; jj < jnum; jj++) {
+				j = jlist[jj];
+				jtype = type[j];
+				delx = xtmp - x[j][0];
+				dely = ytmp - x[j][1];
+				delz = ztmp - x[j][2];
+				rsq = delx * delx + dely * dely + delz * delz;
+
+				if (rsq < cutsq[itype][jtype]) {
+					q = sqrt(rsq) / h;
+
+					if (cubic_flag == 1){
+						if (q < 1)
+							wf = 1 - 1.5 * q * q + 0.75 * q * q * q;
+						else
+							wf = 0.25 * (2 - q) * (2 - q) * (2 - q);
+					}
+					else if (quintic_flag == 1)
+						wf = (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (2 * q + 1);
+
+					if (domain->dim == 3)
+						wf = wf * a3D;
+					else
+						wf = wf * a2D;
+					if (!(mask[i] & bcbit))
+						drho[i] += mass[jtype] * wf / rho[j];
+					if (!(mask[j] & bcbit))
+						drho[j] += mass[itype] * wf / rho[i];
+				}
+
+			}
+			//	use drho[i] to store new rho[i] temporarily
+
+		}
+
+		//		  for (i = 0; i < nlocal; i++){
+		//  rho[i] = rho[i] / drho[i];
+		//			  itype = type[i];
+		//			  if (rho[i] < rho0[itype] * 0.95)
+		//			  rho[i] = rho0[itype];
+		//	  }
+
 	}
 
 
@@ -223,9 +302,15 @@ Setting for pair_style command
 
 void PairSPH_RHOSUM::set_style(int narg, char **arg)
 {
-	if (narg != 2)
-		error->all(FLERR, "Illegal number of setting arguments for pair_style sph/RHOSUM");
-	nstep = atoi(arg[1]);
+	//	if (narg != 4)
+	//		error->all(FLERR, "Illegal number of setting arguments for pair_style sph/idealgas");
+	if (strcmp(arg[1], "Cubic") == 0)
+		cubic_flag = 1;
+	else if (strcmp(arg[1], "Quintic") == 0)
+		quintic_flag = 1;
+	else
+		error->all(FLERR, "Wrong Kernel function");
+	nstep = atoi(arg[2]);
 
 }
 
@@ -235,8 +320,8 @@ Set Coeff for pair_coeff command
 
 void PairSPH_RHOSUM::set_coeff(int narg, char **arg)
 {
-	if (narg != 3)
-		error->all(FLERR, "Incorrect number of args for sph/rhosum coefficients");
+	if (narg != 4)
+		error->all(FLERR, "Incorrect args for pair_style sph/taitwater coefficients");
 	if (!allocated)
 		allocate();
 
@@ -244,16 +329,35 @@ void PairSPH_RHOSUM::set_coeff(int narg, char **arg)
 	force->bounds(arg[0], particle->ntypes, ilo, ihi);
 	force->bounds(arg[1], particle->ntypes, jlo, jhi);
 
-	double cut_one = atof(arg[2]);
+	double rho0_one = atof(arg[2]);
+	double cut_one = atof(arg[3]);
 
 	int count = 0;
 	for (int i = ilo; i <= ihi; i++) {
+		rho0[i] = rho0_one;
 		for (int j = MAX(jlo, i); j <= jhi; j++) {
+			rho0[j] = rho0_one;
 			//printf("setting cut[%d][%d] = %f\n", i, j, cut_one);
-			cutr[i][j] = cut_one;
+			cut[i][j] = 2 * cut_one;
+			cutsq[i][j] = cut[i][j] * cut[i][j];
 			setflag[i][j] = 1;
+
+			//cut[j][i] = cut[i][j];
+			//viscosity[j][i] = viscosity[i][j];
+			//setflag[j][i] = 1;
 			count++;
 		}
+	}
+
+	h = cut_one;
+
+	if (cubic_flag == 1){
+		a2D = 10.0 / 7.0 / PI / h / h;
+		a3D = 1.0 / PI / h / h / h;
+	}
+	else if (quintic_flag == 1){
+		a2D = 7.0 / 4.0 / PI / h / h;
+		a3D = 21.0 / 16.0 / PI / h / h / h;
 	}
 
 	if (count == 0)
@@ -267,10 +371,14 @@ init for one type pair i,j and corresponding j,i
 void PairSPH_RHOSUM::init_one(int i, int j) {
 
 	if (setflag[i][j] == 0) {
-		error->all(FLERR, "All pair sph/rhosum coeffs are not set");
+		error->all(FLERR, "Not all pair sph/taitwater coeffs are set");
 	}
+	force->type2pair[i][j] = pair_id;
 
-	cutr[j][i] = cutr[i][j];
+	cut[j][i] = cut[i][j];
+	cutsq[j][i] = cutsq[i][j];
+	setflag[j][i] = setflag[i][j];
+	force->type2pair[j][i] = force->type2pair[i][j];
 
 
 }
@@ -283,9 +391,34 @@ double PairSPH_RHOSUM::single(int i, int j, int itype, int jtype,
 	return 0.0;
 }
 
-int PairSPH_RHOSUM::pack_forward_comm(int n, int *list, double *buf,
-	int pbc_flag, int *pbc) {
-	int i, j, m;
+int PairSPH_RHOSUM::pack_reverse_comm(int n, int first, double *buf) {
+	int i, m, last;
+	double *rho = particle->rho;
+
+	m = 0;
+	last = first + n;
+	for (i = first; i < last; i++) {
+		buf[m++] = rho[i];
+	}
+	return m;
+}
+
+/* ---------------------------------------------------------------------- */
+
+void PairSPH_RHOSUM::unpack_reverse_comm(int n, int *list, double *buf) {
+	int i, m, j;
+	double *rho = particle->rho;
+
+	m = 0;
+	for (i = 0; i < n; i++) {
+		j = list[i];
+		rho[j] += buf[m++];
+	}
+}
+
+/* ---------------------------------------------------------------------- */
+int PairSPH_RHOSUM::pack_forward_comm(int n, int *list,  double *buf) {
+	int i, m, j; 
 	double *rho = particle->rho;
 
 	m = 0;
@@ -304,6 +437,8 @@ void PairSPH_RHOSUM::unpack_forward_comm(int n, int first, double *buf) {
 
 	m = 0;
 	last = first + n;
-	for (i = first; i < last; i++)
+	for (i = first; i < last; i++) {
 		rho[i] = buf[m++];
+	}
+
 }
