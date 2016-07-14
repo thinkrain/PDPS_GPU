@@ -11,3 +11,4 @@
 #include "pair_sph_localNS.h"
 #include "pair_sph_couple.h"
 #include "pair_sph_idealgas.h"
+#include "pair_sph_lj.h"

@@ -170,93 +170,100 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
     for (jj = 0; jj < jnum; jj++) {
       j = jlist[jj];
  //     j &= NEIGHMASK;
+	  jtype = type[j];
+	  if (setflag[itype][jtype]){
+		  delx = xtmp - x[j][0];
+		  dely = ytmp - x[j][1];
+		  delz = ztmp - x[j][2];
+		  rsq = delx * delx + dely * dely + delz * delz;
 
-      delx = xtmp - x[j][0];  
-      dely = ytmp - x[j][1];
-      delz = ztmp - x[j][2];
-      rsq = delx * delx + dely * dely + delz * delz;
-      jtype = type[j];
-      jmass = mass[jtype];
+		  jmass = mass[jtype];
 
-//	  if (i == 0){
-//		  printf("procid = %d rho[%d] = %f rho[%d] = %f\n", parallel->procid, i, rho[i], j, rho[j]);
-//	  }
-//	  printf("before compute procid = %d i = %d\n itype = %d jtype = %d imass = %f jmass = %f mass[itype] = %f mass[jtype] = %f\n", parallel->procid, i, itype, jtype, imass, jmass, mass[itype], mass[jtype]);
-      if (rsq < cutsq[itype][jtype]) {
+		  //	  if (i == 0){
+		  //		  printf("procid = %d rho[%d] = %f rho[%d] = %f\n", parallel->procid, i, rho[i], j, rho[j]);
+		  //	  }
+		  //	  printf("before compute procid = %d i = %d\n itype = %d jtype = %d imass = %f jmass = %f mass[itype] = %f mass[jtype] = %f\n", parallel->procid, i, itype, jtype, imass, jmass, mass[itype], mass[jtype]);
+		  if (rsq < cutsq[itype][jtype]) {
 
-		  q = sqrt(rsq) / h;
-		  rij_inv = 1.0 / sqrt(rsq);
-		  if (cubic_flag == 1){
-			  if (q < 1)
-				  wfd = -3 * q + 2.25 * q * q;
+			  q = sqrt(rsq) / h;
+			  rij_inv = 1.0 / sqrt(rsq);
+			  if (cubic_flag == 1){
+				  if (q < 1)
+					  wfd = -3 * q + 2.25 * q * q;
+				  else
+					  wfd = -0.75 * (2 - q) * (2 - q);
+			  }
+			  else if (quintic_flag == 1)
+				  wfd = -2 * (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (2 * q + 1) + 2 * (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0);
+
+			  if (domain->dim == 3)
+				  wfd = wfd * a3D / h;
 			  else
-				  wfd = -0.75 * (2 - q) * (2 - q);
+				  wfd = wfd * a2D / h;
+
+			  // compute pressure  of particle j with Tait EOS
+			  tmp = rho[j] / rho0[jtype];
+			  fj = tmp * tmp * tmp;
+			  fj = B[jtype] * (fj * fj * tmp - 1.0) / (rho[j] * rho[j]);
+			  //	printf("procid = %d, rho[%d] = %f, rho0[%d] = %f\n", parallel->procid, j, rho[j], jtype, rho0[jtype]);
+			  // dot product of velocity delta and distance vector
+			  delVdotDelR = delx * (vxtmp - v[j][0]) + dely * (vytmp - v[j][1])
+				  + delz * (vztmp - v[j][2]);
+
+			  // artificial viscosity (Monaghan 1992)
+			  if (delVdotDelR < 0.) {
+				  mu = h * delVdotDelR / (rsq + 0.01 * h * h);
+				  fvisc = -viscosity[itype][jtype] * (soundspeed[itype]
+					  + soundspeed[jtype]) * mu / (rho[i] + rho[j]);
+			  }
+			  else {
+				  fvisc = 0.;
+			  }
+
+
+
+			  // total pair force & thermal energy increment
+			  fpair = -imass * jmass * (fi + fj + fvisc) * wfd;
+	//		  if (particle->tag[i] == 1)
+	//		  			printf("after compute timestep = %d procid = %d  i = %d tag[i] = %d fpair = %f\n fi = %f fj = %f fvisc = %f wfd = %f\n", update->ntimestep, parallel->procid, i, particle->tag[i], fpair, fi, fj, fvisc, wfd);
+			  //		if (particle->tag[i] == 37 && update->ntimestep == 237)
+			  //			printf("after compute timestep = %d procid = %d  i = %d tag[i] = %d fpair = %f\n fi = %f fj = %f fvisc = %f wfd = %f\n", update->ntimestep, parallel->procid, i, particle->tag[i], fpair, fi, fj, fvisc, wfd);
+			  //		if (i == 0)
+			  //			printf("after compute procid = %d  i = %d fpair = %f\n fi = %f fj = %f fvisc = %f wfd = %f\n", parallel->procid, i, fpair, fi, fj, fvisc, wfd);
+			  deltaE = -0.5 * fpair * delVdotDelR;
+
+			  f[i][0] += delx * fpair * rij_inv;
+			  f[i][1] += dely * fpair * rij_inv;
+			  f[i][2] += delz * fpair * rij_inv;
+			  //		if (particle->tag[i] == 37 && update->ntimestep == 236)
+			  //			printf("after compute timestep = %d procid = %d  i = %d tag[i] = %d delx = %f fpair = %f rij_inv = %f\n", update->ntimestep, parallel->procid, i, particle->tag[i], delx, fpair, rij_inv);
+			  //		if (particle->tag[i] == 37 && update->ntimestep == 237)
+			  //			printf("after compute timestep = %d procid = %d  i = %d tag[i] = %d delx = %f fpair = %f rij_inv = %f\n", update->ntimestep, parallel->procid, i, particle->tag[i], delx, fpair, rij_inv);
+			  // and change in density
+			  drho[i] += jmass * delVdotDelR * wfd;
+
+			  // change in thermal energy
+			  de[i] += deltaE;
+
+			  if (newton_pair || j < nlocal) {
+				  f[j][0] -= delx * fpair * rij_inv;
+				  f[j][1] -= dely * fpair * rij_inv;
+				  f[j][2] -= delz * fpair * rij_inv;
+				  de[j] += deltaE;
+				  drho[j] += imass * delVdotDelR * wfd;
+			  }
+
+			  if (evflag)
+				  ev_tally(i, j, nlocal, newton_pair, 0.0, 0.0, fpair, delx, dely, delz);
 		  }
-		  else if (quintic_flag == 1)
-			  wfd = -2 * (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (2 * q + 1) + 2 * (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0);
 
-		  if (domain->dim == 3)
-			  wfd = wfd * a3D / h;
-		  else
-			  wfd = wfd * a2D / h;
+	  } // setflag[itype][jtype]
 
-        // compute pressure  of particle j with Tait EOS
-        tmp = rho[j] / rho0[jtype];
-        fj = tmp * tmp * tmp;
-        fj = B[jtype] * (fj * fj * tmp - 1.0) / (rho[j] * rho[j]);
-	//	printf("procid = %d, rho[%d] = %f, rho0[%d] = %f\n", parallel->procid, j, rho[j], jtype, rho0[jtype]);
-        // dot product of velocity delta and distance vector
-        delVdotDelR = delx * (vxtmp - v[j][0]) + dely * (vytmp - v[j][1])
-            + delz * (vztmp - v[j][2]);
-
-        // artificial viscosity (Monaghan 1992)
-        if (delVdotDelR < 0.) {
-          mu = h * delVdotDelR / (rsq + 0.01 * h * h);
-          fvisc = -viscosity[itype][jtype] * (soundspeed[itype]
-              + soundspeed[jtype]) * mu / (rho[i] + rho[j]);
-        } else {
-          fvisc = 0.;
-        }
-
-	
-
-        // total pair force & thermal energy increment
-        fpair = -imass * jmass * (fi + fj + fvisc) * wfd;
-//		if (particle->tag[i] == 37 && update->ntimestep == 236)
-//			printf("after compute timestep = %d procid = %d  i = %d tag[i] = %d fpair = %f\n fi = %f fj = %f fvisc = %f wfd = %f\n", update->ntimestep, parallel->procid, i, particle->tag[i], fpair, fi, fj, fvisc, wfd);
-//		if (particle->tag[i] == 37 && update->ntimestep == 237)
-//			printf("after compute timestep = %d procid = %d  i = %d tag[i] = %d fpair = %f\n fi = %f fj = %f fvisc = %f wfd = %f\n", update->ntimestep, parallel->procid, i, particle->tag[i], fpair, fi, fj, fvisc, wfd);
-//		if (i == 0)
-//			printf("after compute procid = %d  i = %d fpair = %f\n fi = %f fj = %f fvisc = %f wfd = %f\n", parallel->procid, i, fpair, fi, fj, fvisc, wfd);
-        deltaE = -0.5 * fpair * delVdotDelR;
-
-		f[i][0] += delx * fpair * rij_inv;
-		f[i][1] += dely * fpair * rij_inv;
-		f[i][2] += delz * fpair * rij_inv;
-//		if (particle->tag[i] == 37 && update->ntimestep == 236)
-//			printf("after compute timestep = %d procid = %d  i = %d tag[i] = %d delx = %f fpair = %f rij_inv = %f\n", update->ntimestep, parallel->procid, i, particle->tag[i], delx, fpair, rij_inv);
-//		if (particle->tag[i] == 37 && update->ntimestep == 237)
-//			printf("after compute timestep = %d procid = %d  i = %d tag[i] = %d delx = %f fpair = %f rij_inv = %f\n", update->ntimestep, parallel->procid, i, particle->tag[i], delx, fpair, rij_inv);
-        // and change in density
-        drho[i] += jmass * delVdotDelR * wfd;
-
-        // change in thermal energy
-        de[i] += deltaE;
-
-        if (newton_pair || j < nlocal) {
-          f[j][0] -= delx * fpair * rij_inv;
-		  f[j][1] -= dely * fpair * rij_inv;
-		  f[j][2] -= delz * fpair * rij_inv;
-          de[j] += deltaE;
-          drho[j] += imass * delVdotDelR * wfd;
-        }
-
-        if (evflag)
-          ev_tally(i, j, nlocal, newton_pair, 0.0, 0.0, fpair, delx, dely, delz);
-      }
+     
     }
 
   }
+  
 //  for (i = 0; i < nlocal + particle->nghost; i++){
 //	  if (f[i][0] > 1000000 || f[i][0] < -1000000)
 //		  printf("after pair procid = %d timestep = %d tag[%d] = %d f[%d] = %f\n", parallel->procid, update->ntimestep, i, particle->tag[i], i, f[i][0]);
