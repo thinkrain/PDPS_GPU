@@ -130,30 +130,36 @@ void PairSPH_RHOSUM::compute(int eflag, int vflag)
 	firstneigh = neighbor->neighlist->firstneigh;
 
 	// loop over neighbors of my particles
-
+//	printf("before pair timestep = %d procid = %d rho[0] = %f\n", update->ntimestep, parallel->procid, rho[0]);
 	if ((update->ntimestep % nstep) == 0) {
 
 		// initialize density with self-contribution,
 		for (i = 0; i < nlocal; i++) {
 			itype = type[i];
-			imass = mass[itype];
+			if (setflag[itype][itype]){
+				imass = mass[itype];
+				if (domain->dim == 3) {
 
-			if (domain->dim == 3) {
-
-				// Cubic spline kernel, 3d
-				wf = a3D;
+					// Cubic spline kernel, 3d
+					wf = a3D;
+				}
+				else {
+					// Cubic spline kernel, 2d
+					wf = a2D;
+					//wf = 0.89 / (h * h);
+				}
+				rho[i] = imass * wf;
 			}
-			else {
-
-				// Cubic spline kernel, 2d
-				wf = a2D;
-				//wf = 0.89 / (h * h);
-			}
-			rho[i] += imass * wf;
+			
 		}
-		//MPI_Wait;
-		//  MPI_Wait(& request, &status);
-		// add density at each particle via kernel function overlap
+		if (particle->nghost > 0){
+			for (i = nlocal; i < nlocal + particle->nghost; i++){
+				itype = type[i];
+				if (setflag[itype][itype])
+					rho[i] = 0.0;
+			}
+		}
+
 		for (ii = 0; ii < inum; ii++) {
 			i = ilist[ii];
 			xtmp = x[i][0];
@@ -162,78 +168,60 @@ void PairSPH_RHOSUM::compute(int eflag, int vflag)
 			itype = type[i];
 			jlist = firstneigh[i];
 			jnum = numneigh[i];
-			//			if (parallel->procid == 0){
-			//				printf("inum = %d\n", inum);
-			//				printf("x[%d] = %f, x[%d] = %f \n numneigh[%d] == %d\n", i, x[i][0], i, x[i][1], i, numneigh[i]);
-			//				for (jj = 0; jj < jnum; jj++){
-			//					j = jlist[jj];
-			//					printf("%d neighbor[%d] = %d rho[%d] = %f\n x[%d] = %f \n y[%d] = %f \n", i, jj, j, j, rho[j], j, x[j][0], j, x[j][1]);
-			//				}
-			//		}
 
 			for (jj = 0; jj < jnum; jj++) {
 				j = jlist[jj];
 
 				jtype = type[j];
-				delx = xtmp - x[j][0];
-				dely = ytmp - x[j][1];
-				delz = ztmp - x[j][2];
-				rsq = delx * delx + dely * dely + delz * delz;
+				if (setflag[itype][itype] || setflag[jtype][jtype]){
+					delx = xtmp - x[j][0];
+					dely = ytmp - x[j][1];
+					delz = ztmp - x[j][2];
+					rsq = delx * delx + dely * dely + delz * delz;
 
-				if (rsq < cutsq[itype][jtype]) {
-					q = sqrt(rsq) / h;
+					if (rsq < cutsq[itype][jtype]) {
+						q = sqrt(rsq) / h;
 
-					if (cubic_flag == 1){
-						if (q < 1)
-							wf = 1 - 1.5 * q * q + 0.75 * q * q * q;
+						if (cubic_flag == 1){
+							if (q < 1)
+								wf = 1 - 1.5 * q * q + 0.75 * q * q * q;
+							else
+								wf = 0.25 * (2 - q) * (2 - q) * (2 - q);
+						}
+						else if (quintic_flag == 1)
+							wf = (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (2 * q + 1);
+
+						if (domain->dim == 3)
+							wf = wf * a3D;
 						else
-							wf = 0.25 * (2 - q) * (2 - q) * (2 - q);
+							wf = wf * a2D;
+						if (setflag[itype][itype]){
+							rho[i] += mass[jtype] * wf;
+				//			if (update->ntimestep == 0 && particle->tag[i] == 3)
+				//				printf("in computing i procid = %d rho[%d] = %f tag[%d] = %d\n", parallel->procid, i, rho[i], j, particle->tag[j]);
+						}
+							
+						if (setflag[jtype][jtype]){
+							rho[j] += mass[itype] * wf;
+		//					if (update->ntimestep == 0 && particle->tag[j] == 3)
+		//						printf("in computing j procid = %d rho[%d] = %f tag[%d] = %d\n", parallel->procid, j, rho[j], i, particle->tag[i]);
+						}
+
+
 					}
-					else if (quintic_flag == 1)
-						wf = (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (2 * q + 1);
-
-					if (domain->dim == 3)
-						wf = wf * a3D;
-					else
-						wf = wf * a2D;
-
-					rho[i] += mass[jtype] * wf;
-					//				if (particle->tag[i] == 3 && parallel->procid == 1){
-					//						printf("3I timestep = %d\n rho[3] = %f\n procid = %d\n numneigh[3] = %d\n i = %d j = %d\n", update->ntimestep, rho[i], parallel->procid, numneigh[i], i, j);
-					//					}
-
-					rho[j] += mass[itype] * wf;
-					//				if (particle->tag[j] == 3 && parallel->procid == 1){
-					//					printf("3J timestep = %d\n rho[3] = %f\n procid = %d\n numneigh[3] = %d\n i = %d j = %d\n", update->ntimestep, rho[j], parallel->procid, numneigh[i], i, j);
-					//				}
-
 
 				}
 
 			}
 		}
 		parallel->reverse_comm_pair(this);
-	//	if (update->ntimestep == 236 && parallel->procid == 0)
-	//		printf("before borders 236 ghost = %d tag[28] = %d f[28] = %f\n", particle->nghost, particle->tag[28], particle->f[28][0]);
-	////	parallel->borders();
-				  for (i = 0; i < nlocal; i++){
-					  //rho[i] = rho[i] / drho[i];
-					  itype = type[i];
-					  if (rho[i] < rho0[itype] * 0.95)
-					  rho[i] = rho0[itype];
-					}
+	//	for (i = 0; i < nlocal; i++){
+	//		itype = type[i];
+	//		if (rho[i] < rho0[itype] * 0.95)
+	//			rho[i] = rho0[itype];
+	//	  }
 		parallel->forward_comm_pair(this);
-	//	if (update->ntimestep == 236 && parallel->procid == 0)
-	//		printf("after borders 236 ghost = %d tag[28] = %d f[28] = %f\n", particle->nghost, particle->tag[28], particle->f[28][0]);
-		//	  if (update->ntimestep > 90){
-		//		  for (i = 0; i < nlocal; i++){
-		//			  if (particle->tag[i] == 3999)
-		//				  printf("timestep = %d\n rho[4000] = %f\n procid = %d\n numneigh[4000] = %d\n", update->ntimestep, rho[i], parallel->procid, numneigh[i]);
-		//		  }
-		//	  }
-
-
-
+//		printf("after forward timestep = %d procid = %d rho[0] = %f\n", update->ntimestep, parallel->procid, rho[0]);
 		//  density correction phase
 		for (i = 0; i < 0; i++){
 			itype = type[i];
@@ -282,15 +270,7 @@ void PairSPH_RHOSUM::compute(int eflag, int vflag)
 
 		}
 
-		//		  for (i = 0; i < nlocal; i++){
-		//  rho[i] = rho[i] / drho[i];
-		//			  itype = type[i];
-		//			  if (rho[i] < rho0[itype] * 0.95)
-		//			  rho[i] = rho0[itype];
-		//	  }
-
 	}
-
 
 }
 
@@ -408,11 +388,17 @@ int PairSPH_RHOSUM::pack_reverse_comm(int n, int first, double *buf) {
 void PairSPH_RHOSUM::unpack_reverse_comm(int n, int *list, double *buf) {
 	int i, m, j;
 	double *rho = particle->rho;
-
+	int *type = particle->type;
+	int jtype;
 	m = 0;
+	
 	for (i = 0; i < n; i++) {
 		j = list[i];
-		rho[j] += buf[m++];
+		jtype = type[j];
+		if (setflag[jtype][jtype])
+			rho[j] += buf[m++];
+		else
+			m++;
 	}
 }
 
