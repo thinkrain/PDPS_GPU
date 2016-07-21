@@ -161,11 +161,12 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
     jnum = numneigh[i];
 
     imass = mass[itype];
-	
     // compute pressure of particle i with Tait EOS
     tmp = rho[i] / rho0[itype];
     fi = tmp * tmp * tmp;
     fi = B[itype] * (fi * fi * tmp - 1.0) / (rho[i] * rho[i]);
+//	if (fi > 0.5)
+//		printf("procid = %d, tag[%d] = %d, rho[%d] = %f\n", parallel->procid, i, particle->tag[i], i, rho[i]);
 
     for (jj = 0; jj < jnum; jj++) {
       j = jlist[jj];
@@ -207,6 +208,7 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
 			  fj = B[jtype] * (fj * fj * tmp - 1.0) / (rho[j] * rho[j]);
 			  //	printf("procid = %d, rho[%d] = %f, rho0[%d] = %f\n", parallel->procid, j, rho[j], jtype, rho0[jtype]);
 			  // dot product of velocity delta and distance vector
+			
 			  delVdotDelR = delx * (vxtmp - v[j][0]) + dely * (vytmp - v[j][1])
 				  + delz * (vztmp - v[j][2]);
 
@@ -224,8 +226,10 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
 
 			  // total pair force & thermal energy increment
 			  fpair = -imass * jmass * (fi + fj + fvisc) * wfd;
-	//		  if (particle->tag[i] == 1)
-	//		  			printf("after compute timestep = %d procid = %d  i = %d tag[i] = %d fpair = %f\n fi = %f fj = %f fvisc = %f wfd = %f\n", update->ntimestep, parallel->procid, i, particle->tag[i], fpair, fi, fj, fvisc, wfd);
+	//		  if (particle->tag[i] == 2552)
+//			  			printf("after compute timestep = %d procid = %d  i = %d tag[i] = %d fpair = %f\n fi = %f fj = %f fvisc = %f wfd = %f\n", update->ntimestep, parallel->procid, i, particle->tag[i], fpair, fi, fj, fvisc, wfd);
+//			  if (fj > 0.5 || fj < -0.5)
+//				  printf("procid = %d, tag[%d] = %d, rho[%d] = %f\n", parallel->procid, j, particle->tag[j], j, rho[j]);
 			  //		if (particle->tag[i] == 37 && update->ntimestep == 237)
 			  //			printf("after compute timestep = %d procid = %d  i = %d tag[i] = %d fpair = %f\n fi = %f fj = %f fvisc = %f wfd = %f\n", update->ntimestep, parallel->procid, i, particle->tag[i], fpair, fi, fj, fvisc, wfd);
 			  //		if (i == 0)
@@ -237,8 +241,8 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
 			  f[i][2] += delz * fpair * rij_inv;
 			  //		if (particle->tag[i] == 37 && update->ntimestep == 236)
 			  //			printf("after compute timestep = %d procid = %d  i = %d tag[i] = %d delx = %f fpair = %f rij_inv = %f\n", update->ntimestep, parallel->procid, i, particle->tag[i], delx, fpair, rij_inv);
-			  //		if (particle->tag[i] == 37 && update->ntimestep == 237)
-			  //			printf("after compute timestep = %d procid = %d  i = %d tag[i] = %d delx = %f fpair = %f rij_inv = %f\n", update->ntimestep, parallel->procid, i, particle->tag[i], delx, fpair, rij_inv);
+//			  		if (particle->tag[i] == 2552)
+//			  			printf("after compute timestep = %d procid = %d  i = %d tag[i] = %d delx = %f fpair = %f rij_inv = %f\n", update->ntimestep, parallel->procid, i, particle->tag[i], delx, fpair, rij_inv);
 			  // and change in density
 			  drho[i] += jmass * delVdotDelR * wfd;
 
@@ -246,6 +250,8 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
 			  de[i] += deltaE;
 
 			  if (newton_pair || j < nlocal) {
+				  if (j == 8819)
+					  j = j;
 				  f[j][0] -= delx * fpair * rij_inv;
 				  f[j][1] -= dely * fpair * rij_inv;
 				  f[j][2] -= delz * fpair * rij_inv;

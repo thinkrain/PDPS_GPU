@@ -1149,9 +1149,6 @@ void Parallel::reverse_comm()
 				if (size_reverse_recv[iswap])
 					MPI_Irecv(buf_recv,size_reverse_recv[iswap],MPI_DOUBLE,
 						sendproc[iswap],0,mworld,&request);
-//				if (parallel->procid == 0 && update->ntimestep == 236){
-//					printf("goast = %d timestep = %d procid = %d recvnum[iswap] = %d, firstrecv[iswap] = %d, buf[80] = %f f[28] = %f\n", particle->nghost, update->ntimestep, parallel->procid, recvnum[iswap], firstrecv[iswap], buf_send[80], particle->f[28][0]);
-//				}
 				n = ptype->pack_reverse(recvnum[iswap],firstrecv[iswap],buf_send);
 				if (n) MPI_Send(buf_send,n,MPI_DOUBLE,recvproc[iswap],0,mworld);
 				if (size_reverse_recv[iswap]) MPI_Wait(&request,&status);
@@ -1187,27 +1184,18 @@ void Parallel::reverse_comm_pair(Pair *pair)
 	// exchange data with another proc
 	// if other proc is self, just copy
 	// if comm_f_only set, exchange or copy directly from f, don't pack
-	//printf("before reverse_comm nswap = %d", nswap);
 	for (int iswap = nswap - 1; iswap >= 0; iswap--) {
-	//	printf("iswap = %d timestep = %d procid = %d recvnum[iswap] = %d sendnum[iswap] = %d\n", iswap, update->ntimestep, parallel->procid, recvnum[iswap], sendnum[iswap]);
 		if (sendproc[iswap] != procid) {
 
 			if (sendnum[iswap])
-				MPI_Irecv(buf_recv, sendnum[iswap], MPI_DOUBLE, sendproc[iswap], 0, mworld, &request);
+				MPI_Irecv(buf_recv, pair->comm_reverse * sendnum[iswap], MPI_DOUBLE, sendproc[iswap], 0, mworld, &request);
 			n = pair->pack_reverse_comm(recvnum[iswap], firstrecv[iswap], buf_send);
-	//		printf("iswap = %d timestep = %d procid = %d recvnum[iswap] = %d sendnum[iswap] = %d\n", iswap, update->ntimestep, parallel->procid, recvnum[iswap], sendnum[iswap]);
-	//		if (n)
-	//			printf("timestep = %d procid = %d recvnum[iswap] = %d\n", update->ntimestep, parallel->procid, recvnum[iswap]);
-				//printf("procid = %d buf[2] = %d tag[2] = %d\n", parallel->procid, firstrecv[iswap] + 2, particle->tag[firstrecv[iswap] + 2]);
 			if (n)
 			{
 				MPI_Send(buf_send, n, MPI_DOUBLE, recvproc[iswap], 0, mworld);
 			}
 			if (sendnum[iswap])
 				MPI_Wait(&request, &status);
-	//		if (sendnum[iswap])
-	//			printf("timestep = %d procid = %d sendnum[iswap] = %d\n", update->ntimestep, parallel->procid, sendnum[iswap]);
-				//printf("procid = %d buf[2] = %d tag[2] = %d\n", parallel->procid, sendlist[iswap][2], particle->tag[sendlist[iswap][2]]);
 			pair->unpack_reverse_comm(sendnum[iswap], sendlist[iswap], buf_recv);
 		} // if (sendproc[iswap] != procid)
 		else{
@@ -1233,12 +1221,12 @@ void Parallel::forward_comm_pair(Pair *pair)
 	// exchange data with another proc
 	// if other proc is self, just copy
 	// if comm_f_only set, exchange or copy directly from f, don't pack
-	for (int iswap = nswap - 1; iswap >= 0; iswap--) {
+	for (int iswap = 0; iswap < nswap; iswap++) {
 
 		if (sendproc[iswap] != procid) {
 
 			if (recvnum[iswap])
-				MPI_Irecv(buf_recv, recvnum[iswap], MPI_DOUBLE, recvproc[iswap], 0, mworld, &request);
+				MPI_Irecv(buf_recv, pair->comm_forward * recvnum[iswap], MPI_DOUBLE, recvproc[iswap], 0, mworld, &request);
 			n = pair->pack_forward_comm(sendnum[iswap], sendlist[iswap], buf_send);
 			if (n)
 			{
@@ -1253,5 +1241,5 @@ void Parallel::forward_comm_pair(Pair *pair)
 			pair->unpack_forward_comm(recvnum[iswap], firstrecv[iswap], buf_send);
 		}
 
-	} // for (int iswap = nswap-1; iswap >= 0; iswap--)
+	} // for (int iswap = iswap; iswap >= 0; iswap++)
 }

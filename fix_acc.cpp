@@ -106,7 +106,8 @@ void FixAcc::post_force()
 				inside_flag = domain->regions[rid]->inside(x[i]);
 				if (inside_flag == 0) continue;
 			}
-			if (rmass_flag) massone = rmass[i];
+			if (rmass_flag) 
+				massone = rmass[i];
 			else massone = mass[type[i]];
 			f[i][0] += massone*xacc;
 			f[i][1] += massone*yacc;

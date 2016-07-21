@@ -175,7 +175,7 @@ void FixAddForce::add_drag_stokes()
 	if (coupled = 1){
 		int *ilist, *jlist, *numneigh, **firstneigh;
 		int inum, jnum, jtype, ii, jj, i, j;
-		double imass, h, ih, ihsq, wf;
+		double imass, h, q, wf;
 		double xtmp, ytmp, ztmp, delx, dely, delz, rsq;
 		inum = neighbor->neighlist->inum;
 		ilist = neighbor->neighlist->ilist;
@@ -206,38 +206,20 @@ void FixAddForce::add_drag_stokes()
 					pair_id = force->type2pair[itype][itype];
 					//h = force->pair[pair_id]->cut[itype][itype];
 					h = radius[i];
-					if (rsq < h * h) {
-						ih = 1.0 / h;             
-						ihsq = ih * ih;
+					if (rsq < 4 * h * h) {
 
-						if (domain->dim == 3) {
-							/*
-							// Lucy kernel, 3d
-							r = sqrt(rsq);
-							wf = (h - r) * ihsq;
-							wf =  2.0889086280811262819e0 * (h + 3. * r) * wf * wf * wf * ih;
-							*/
+						q = sqrt(rsq) / h;
 
-							// quadric kernel, 3d
-							wf = 1.0 - rsq * ihsq;
-							wf = wf * wf;
-							wf = wf * wf;
-							wf = 2.1541870227086614782e0 * wf * ihsq * ih;
-						}
-						else {
-							// Lucy kernel, 2d
-							//r = sqrt(rsq);
-							//wf = (h - r) * ihsq;
-							//wf = 1.5915494309189533576e0 * (h + 3. * r) * wf * wf * wf;
+						if (q < 1)
+							wf = 1 - 1.5 * q * q + 0.75 * q * q * q;
+						else
+							wf = 0.25 * (2 - q) * (2 - q) * (2 - q);
+						if (domain->dim == 3)
+							wf = wf * 1.0 / PI / h / h / h;
+						else
+							wf = wf * 10.0 / 7.0 / PI / h / h;
 
-							// quadric kernel, 2d
-							wf = 1.0 - rsq * ihsq;
-							wf = wf * wf;
-							wf = wf * wf;
-							wf = 1.5915494309189533576e0 * wf * ihsq;
-							//wf = 0.9 * wf * ihsq;
-						}
-						double Volume = 4 / 3 * PI * radius[i] * radius[i] * radius[i];
+						double Volume = 4.0 / 3.0 * PI * radius[i] * radius[i] * radius[i];
 						f[j][0] -= coeff * radius[i] * v[i][0] * Volume * wf;
 						f[j][1] -= coeff * radius[i] * v[i][1] * Volume * wf;
 						f[j][2] -= coeff * radius[i] * v[i][2] * Volume * wf;

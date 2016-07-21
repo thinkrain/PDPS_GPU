@@ -70,7 +70,7 @@ void FixSPH::initial_integrate()
 	for (int i = 0; i < nlocal; i++) {
 		if (mask[i] & groupbit) {
 			if (sphere_flag == 1) {
-				rmass[i] = 4 / 3 * PI * density[i] * radius[i] * radius[i] * radius[i];
+				rmass[i] = 4.0 / 3.0 * PI * density[i] * radius[i] * radius[i] * radius[i];
 				dtfm = dtf / rmass[i];
 			}
 			else dtfm = dtf / mass[type[i]];
@@ -123,7 +123,7 @@ void FixSPH::final_integrate()
 	for (int i = 0; i < nlocal; i++) {
 		if (mask[i] & groupbit) {
 			if (sphere_flag == 1) {
-				rmass[i] = 4 / 3 * PI * density[i] * radius[i] * radius[i] * radius[i];
+				rmass[i] = 4.0 / 3.0 * PI * density[i] * radius[i] * radius[i] * radius[i];
 				dtfm = dtf / rmass[i];
 			}
 			else dtfm = dtf / mass[type[i]];

@@ -124,7 +124,7 @@ void ParticleTypeSph::create_particle(int itype, double *coord)
 	radius[nlocal] = 0.0;
 	density[nlocal] = 0.0;
 	rmass[nlocal] = 0.0;
-	poro[nlocal] = 1.0;
+	poro[nlocal] = 0.0;
 	volume[nlocal] = 0.0;
 	hlocal[nlocal] = 0.0;
 	particle->nlocal++;
