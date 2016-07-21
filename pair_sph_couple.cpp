@@ -94,7 +94,7 @@ void PairSPH_COUPLE::compute(int eflag, int vflag)
   double xtmp, ytmp, ztmp, delx, dely, delz, fpair;
 
   int *ilist, *jlist, *numneigh, **firstneigh;
-  double vxtmp, vytmp, vztmp, imass, jmass, fi, fj, fvisc, h, ih, ihsq;
+  double vxtmp, vytmp, vztmp, imass, jmass, fi, fj, fvisc;
   double rsq, tmp, wfd, delVdotDelR, mu, deltaE;
 
   if (eflag || vflag)
@@ -114,7 +114,7 @@ void PairSPH_COUPLE::compute(int eflag, int vflag)
   double *hlocal = particle->hlocal;
   int *type = particle->type;
   int nlocal = particle->nlocal;
-  double wf;
+  double wf, q, rij_inv;
 //  int newton_pair = force->newton_pair;
 
   // check consistency of pair coefficients
@@ -164,43 +164,29 @@ void PairSPH_COUPLE::compute(int eflag, int vflag)
 				j = jlist[jj];
 				//     j &= NEIGHMASK;
 				jtype = type[j];
+				jmass = mass[jtype];
 				if (jtype == phase_f){
 					delx = xtmp - x[j][0];
 					dely = ytmp - x[j][1];
 					delz = ztmp - x[j][2];
 					rsq = delx * delx + dely * dely + delz * delz;
 					if (rsq < cutsq[itype][jtype]) {
-						h = cut[itype][jtype];
-						ih = 1.0 / h;
-						ihsq = ih * ih;
-						jmass = mass[jtype];
-						if (domain->dim == 3) {
-							/*
-							// Lucy kernel, 3d
-							r = sqrt(rsq);
-							wf = (h - r) * ihsq;
-							wf =  2.0889086280811262819e0 * (h + 3. * r) * wf * wf * wf * ih;
-							*/
+						q = sqrt(rsq) / h;
 
-							// quadric kernel, 3d
-							wf = 1.0 - rsq * ihsq;
-							wf = wf * wf;
-							wf = wf * wf;
-							wf = 2.1541870227086614782e0 * wf * ihsq * ih;
+						if (cubic_flag == 1){
+							if (q < 1)
+								wf = 1 - 1.5 * q * q + 0.75 * q * q * q;
+							else
+								wf = 0.25 * (2 - q) * (2 - q) * (2 - q);
 						}
-						else {
-							// Lucy kernel, 2d
-							//r = sqrt(rsq);
-							//wf = (h - r) * ihsq;
-							//wf = 1.5915494309189533576e0 * (h + 3. * r) * wf * wf * wf;
+						else if (quintic_flag == 1)
+							wf = (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (2 * q + 1);
 
-							// quadric kernel, 2d
-							wf = 1.0 - rsq * ihsq;
-							wf = wf * wf;
-							wf = wf * wf;
-							wf = 1.5915494309189533576e0 * wf * ihsq;
-							//wf = 0.9 * wf * ihsq;
-						}
+						if (domain->dim == 3)
+							wf = wf * a3D;
+						else
+							wf = wf * a2D;
+
 						fx += f[j][0] * wf;
 						fy += f[j][1] * wf;
 						fz += f[j][2] * wf;
@@ -233,9 +219,12 @@ void PairSPH_COUPLE::compute(int eflag, int vflag)
 
 void PairSPH_COUPLE::set_style(int narg, char **arg)
 {
-	if (narg != 2)
-		error->all(FLERR, "Illegal number of setting arguments for pair_style sph/taitwater");
-	nstep = atoi(arg[1]);
+	if (strcmp(arg[1], "Cubic") == 0)
+		cubic_flag = 1;
+	else if (strcmp(arg[1], "Quintic") == 0)
+		quintic_flag = 1;
+	else
+		error->all(FLERR, "Wrong Kernel function");
 
 }
 
@@ -245,10 +234,12 @@ void PairSPH_COUPLE::set_style(int narg, char **arg)
 
 void PairSPH_COUPLE::set_coeff(int narg, char **arg)
 {
-   if (narg != 6)
-    error->all(FLERR, "Incorrect args for pair_style sph/taitwater coefficients");
+
+
+  if (narg != 6)
+	  error->all(FLERR, "Incorrect args for pair_style sph/taitwater coefficients");
   if (!allocated)
-    allocate();
+	  allocate();
 
   int ilo, ihi, jlo, jhi;
   force->bounds(arg[0], particle->ntypes, ilo, ihi);
@@ -261,30 +252,44 @@ void PairSPH_COUPLE::set_coeff(int narg, char **arg)
   double rho0_one = atof(arg[2]);
   double soundspeed_one = atof(arg[3]);
   double viscosity_one = atof(arg[4]);
-  double cut_one = atof(arg[5]); 
+  double cut_one = atof(arg[5]);
   double B_one = soundspeed_one * soundspeed_one * rho0_one / 7.0;
 
   int count = 0;
   for (int i = ilo; i <= ihi; i++) {
-    rho0[i] = rho0_one;
-	
-    soundspeed[i] = soundspeed_one;
-    B[i] = B_one;
-    for (int j = MAX(jlo,i); j <= jhi; j++) {
-      viscosity[i][j] = viscosity_one;
-      //printf("setting cut[%d][%d] = %f\n", i, j, cut_one);
-      cut[i][j] = cut_one;
-	  cutsq[i][j] = cut[i][j] * cut[i][j];
-      setflag[i][j] = 1;
+	  rho0[i] = rho0_one;
+	  soundspeed[i] = soundspeed_one;
+	  B[i] = B_one;
+	  for (int j = MAX(jlo, i); j <= jhi; j++) {
+		  rho0[j] = rho0_one;
+		  soundspeed[j] = soundspeed_one;
+		  B[j] = B_one;
+		  viscosity[i][j] = viscosity_one;
+		  //printf("setting cut[%d][%d] = %f\n", i, j, cut_one);
+		  cut[i][j] = 2 * cut_one;
+		  cutsq[i][j] = cut[i][j] * cut[i][j];
+		  setflag[i][j] = 1;
 
-      //cut[j][i] = cut[i][j];
-      //viscosity[j][i] = viscosity[i][j];
-      //setflag[j][i] = 1;
-      count++;
-    }
+		  //cut[j][i] = cut[i][j];
+		  //viscosity[j][i] = viscosity[i][j];
+		  //setflag[j][i] = 1;
+		  count++;
+	  }
   }
+
+  h = cut_one;
+
+  if (cubic_flag == 1){
+	  a2D = 10.0 / 7.0 / PI / h / h;
+	  a3D = 1.0 / PI / h / h / h;
+  }
+  else if (quintic_flag == 1){
+	  a2D = 7.0 / 4.0 / PI / h / h;
+	  a3D = 21.0 / 16.0 / PI / h / h / h;
+  }
+
   if (count == 0)
-    error->all(FLERR,"Incorrect args for pair coefficients");
+	  error->all(FLERR, "Incorrect args for pair coefficients");
 }
 
 /* ----------------------------------------------------------------------

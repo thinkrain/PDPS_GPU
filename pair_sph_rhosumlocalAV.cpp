@@ -18,10 +18,11 @@ See the README file in the top-level PDPS directory.
 #include "memory.h"
 #include "neighbor.h"
 #include "neigh_list.h"
-#include "pair_sph_rhosum.h"
+#include "pair_sph_rhosumlocalAV.h"
 #include "particle.h"
 #include "random_mars.h"
 #include "update.h"
+#include "group.h"
 
 using namespace PDPS_NS;
 
@@ -31,7 +32,7 @@ using namespace PDPS_NS;
 #define PI 3.1416
 /* ---------------------------------------------------------------------- */
 
-PairSPH_RHOSUM::PairSPH_RHOSUM(PDPS *ps) : Pair(ps)
+PairSPH_RHOSUMLOCALAV::PairSPH_RHOSUMLOCALAV(PDPS *ps) : Pair(ps)
 {
 	first = 1;
 	newton_pair = 1;
@@ -39,14 +40,14 @@ PairSPH_RHOSUM::PairSPH_RHOSUM(PDPS *ps) : Pair(ps)
 	cubic_flag = 0;
 	quintic_flag = 0;
 	h = 0.0;
-	comm_forward = comm_reverse = 1;
 	cut = NULL;
 	cutsq = NULL;
+	comm_forward = comm_reverse = 2;
 }
 
 /* ---------------------------------------------------------------------- */
 
-PairSPH_RHOSUM::~PairSPH_RHOSUM()
+PairSPH_RHOSUMLOCALAV::~PairSPH_RHOSUMLOCALAV()
 {
 	if (allocated) {
 		memory->destroy(setflag);
@@ -60,7 +61,7 @@ PairSPH_RHOSUM::~PairSPH_RHOSUM()
 
 /* ---------------------------------------------------------------------- */
 
-void PairSPH_RHOSUM::allocate()
+void PairSPH_RHOSUMLOCALAV::allocate()
 {
 	allocated = 1;
 	int n = particle->ntypes;
@@ -80,7 +81,7 @@ void PairSPH_RHOSUM::allocate()
 Compute force for all paritcles
 ------------------------------------------------------------------------- */
 
-void PairSPH_RHOSUM::compute(int eflag, int vflag)
+void PairSPH_RHOSUMLOCALAV::compute(int eflag, int vflag)
 {
 	int i, j, ii, jj, inum, jnum, itype, jtype;
 	double xtmp, ytmp, ztmp, delx, dely, delz, fpair;
@@ -102,6 +103,8 @@ void PairSPH_RHOSUM::compute(int eflag, int vflag)
 	double *mass = particle->mass;
 	double *de = particle->de;
 	double *drho = particle->drho;
+	double *poro = particle->poro;
+	double *volume = particle->volume;
 	int *type = particle->type;
 	int *mask = particle->mask;
 	int nlocal = particle->nlocal;
@@ -150,6 +153,7 @@ void PairSPH_RHOSUM::compute(int eflag, int vflag)
 					//wf = 0.89 / (h * h);
 				}
 				rho[i] = imass * wf;
+				poro[i] = 0.0;
 			}
 			
 		}
@@ -173,7 +177,7 @@ void PairSPH_RHOSUM::compute(int eflag, int vflag)
 				j = jlist[jj];
 
 				jtype = type[j];
-				if (setflag[itype][itype] || setflag[jtype][jtype]){
+				if (setflag[itype][jtype]){
 					delx = xtmp - x[j][0];
 					dely = ytmp - x[j][1];
 					delz = ztmp - x[j][2];
@@ -195,14 +199,25 @@ void PairSPH_RHOSUM::compute(int eflag, int vflag)
 							wf = wf * a3D;
 						else
 							wf = wf * a2D;
-						if (setflag[itype][itype]){
-							rho[i] += mass[jtype] * wf;
-						}
-							
-						if (setflag[jtype][jtype]){
-							rho[j] += mass[itype] * wf;
-						}
 
+						//  detect solid particle for local average
+						if (mask[i] & sgroupbit && setflag[jtype][jtype]){
+							rho[i] += mass[jtype] * wf;
+							poro[j] += volume[i] * wf;
+						}
+						else if (mask[j] & sgroupbit && setflag[itype][itype]){
+							rho[j] += mass[itype] * wf;
+							poro[i] += volume[j] * wf;
+						}
+						else {
+							if (setflag[itype][itype]){
+								rho[i] += mass[jtype] * wf;
+							}
+
+							if (setflag[jtype][jtype]){
+								rho[j] += mass[itype] * wf;
+							}
+						}
 
 					}
 
@@ -213,54 +228,13 @@ void PairSPH_RHOSUM::compute(int eflag, int vflag)
 		}
 	
 		parallel->reverse_comm_pair(this);
+		for (i = 0; i < nlocal; i++){
+			itype = type[i];
+			if (setflag[itype][itype])
+				rho[i] = rho[i] / (1 - poro[i]);
+		}
 		parallel->forward_comm_pair(this);
 
-		for (i = 0; i < 0; i++){
-			itype = type[i];
-			xtmp = x[i][0];
-			ytmp = x[i][1];
-			ztmp = x[i][2];	//  if this is low density at boundary
-
-			if (domain->dim == 3)
-				drho[i] = a3D / rho[i];
-			else
-				drho[i] = a2D / rho[i];
-			jlist = firstneigh[i];
-			jnum = numneigh[i];
-			for (jj = 0; jj < jnum; jj++) {
-				j = jlist[jj];
-				jtype = type[j];
-				delx = xtmp - x[j][0];
-				dely = ytmp - x[j][1];
-				delz = ztmp - x[j][2];
-				rsq = delx * delx + dely * dely + delz * delz;
-
-				if (rsq < cutsq[itype][jtype]) {
-					q = sqrt(rsq) / h;
-
-					if (cubic_flag == 1){
-						if (q < 1)
-							wf = 1 - 1.5 * q * q + 0.75 * q * q * q;
-						else
-							wf = 0.25 * (2 - q) * (2 - q) * (2 - q);
-					}
-					else if (quintic_flag == 1)
-						wf = (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (2 * q + 1);
-
-					if (domain->dim == 3)
-						wf = wf * a3D;
-					else
-						wf = wf * a2D;
-					if (!(mask[i] & bcbit))
-						drho[i] += mass[jtype] * wf / rho[j];
-					if (!(mask[j] & bcbit))
-						drho[j] += mass[itype] * wf / rho[i];
-				}
-
-			}
-			//	use drho[i] to store new rho[i] temporarily
-
-		}
 
 	}
 
@@ -272,7 +246,7 @@ void PairSPH_RHOSUM::compute(int eflag, int vflag)
 Setting for pair_style command
 ------------------------------------------------------------------------- */
 
-void PairSPH_RHOSUM::set_style(int narg, char **arg)
+void PairSPH_RHOSUMLOCALAV::set_style(int narg, char **arg)
 {
 	//	if (narg != 4)
 	//		error->all(FLERR, "Illegal number of setting arguments for pair_style sph/idealgas");
@@ -284,13 +258,21 @@ void PairSPH_RHOSUM::set_style(int narg, char **arg)
 		error->all(FLERR, "Wrong Kernel function");
 	nstep = atoi(arg[2]);
 
+	sgid = group->find_group(arg[3]);
+	if (sgid == -1) {
+		char str[128];
+		sprintf(str, "Cannot find group id: %s", arg[3]);
+		error->all(FLERR, str);
+	}
+	sgroupbit = group->bitmask[sgid];
+
 }
 
 /* ----------------------------------------------------------------------
 Set Coeff for pair_coeff command
 ------------------------------------------------------------------------- */
 
-void PairSPH_RHOSUM::set_coeff(int narg, char **arg)
+void PairSPH_RHOSUMLOCALAV::set_coeff(int narg, char **arg)
 {
 	if (narg != 4)
 		error->all(FLERR, "Incorrect args for pair_style sph/taitwater coefficients");
@@ -340,7 +322,7 @@ void PairSPH_RHOSUM::set_coeff(int narg, char **arg)
 init for one type pair i,j and corresponding j,i
 ------------------------------------------------------------------------- */
 
-void PairSPH_RHOSUM::init_one(int i, int j) {
+void PairSPH_RHOSUMLOCALAV::init_one(int i, int j) {
 
 	if (setflag[i][j] == 0) {
 		error->all(FLERR, "Not all pair sph/taitwater coeffs are set");
@@ -357,66 +339,74 @@ void PairSPH_RHOSUM::init_one(int i, int j) {
 
 /* ---------------------------------------------------------------------- */
 
-double PairSPH_RHOSUM::single(int i, int j, int itype, int jtype,
+double PairSPH_RHOSUMLOCALAV::single(int i, int j, int itype, int jtype,
 	double rsq, double factor_coul, double factor_lj, double &fforce) {
 	fforce = 0.0;
 	return 0.0;
 }
 
-int PairSPH_RHOSUM::pack_reverse_comm(int n, int first, double *buf) {
+int PairSPH_RHOSUMLOCALAV::pack_reverse_comm(int n, int first, double *buf) {
 	int i, m, last;
 	double *rho = particle->rho;
-
+	double *poro = particle->poro;
 	m = 0;
 	last = first + n;
 	for (i = first; i < last; i++) {
 		buf[m++] = rho[i];
+		buf[m++] = poro[i];
 	}
 	return m;
 }
 
 /* ---------------------------------------------------------------------- */
 
-void PairSPH_RHOSUM::unpack_reverse_comm(int n, int *list, double *buf) {
+void PairSPH_RHOSUMLOCALAV::unpack_reverse_comm(int n, int *list, double *buf) {
 	int i, m, j;
 	double *rho = particle->rho;
 	int *type = particle->type;
+	double *poro = particle->poro;
+	int *mask = particle->mask;
 	int jtype;
 	m = 0;
 	
 	for (i = 0; i < n; i++) {
 		j = list[i];
 		jtype = type[j];
-		if (setflag[jtype][jtype])
+		if (setflag[jtype][jtype] || mask[j] & sgroupbit)
 			rho[j] += buf[m++];
 		else
 			m++;
+		poro[j] += buf[m++];
 	}
 }
 
 /* ---------------------------------------------------------------------- */
-int PairSPH_RHOSUM::pack_forward_comm(int n, int *list,  double *buf) {
+int PairSPH_RHOSUMLOCALAV::pack_forward_comm(int n, int *list,  double *buf) {
 	int i, m, j; 
 	double *rho = particle->rho;
+	double *poro = particle->poro;
 
 	m = 0;
 	for (i = 0; i < n; i++) {
 		j = list[i];
 		buf[m++] = rho[j];
+		buf[m++] = poro[j];
 	}
 	return m;
 }
 
 /* ---------------------------------------------------------------------- */
 
-void PairSPH_RHOSUM::unpack_forward_comm(int n, int first, double *buf) {
+void PairSPH_RHOSUMLOCALAV::unpack_forward_comm(int n, int first, double *buf) {
 	int i, m, last;
 	double *rho = particle->rho;
+	double *poro = particle->poro;
 
 	m = 0;
 	last = first + n;
 	for (i = first; i < last; i++) {
 		rho[i] = buf[m++];
+		poro[i] = buf[m++];
 	}
 
 }

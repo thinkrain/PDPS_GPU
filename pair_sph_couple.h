@@ -39,8 +39,10 @@ protected:
 	double **cutd, **cutdsq;
 	double sigma;					//  parameter to control the relationship of kernel length and density
 	class RanMars *random;
+	double a2D, a3D, h;
 	double *rho0, *soundspeed, *B;
 	double **viscosity;
+	int cubic_flag, quintic_flag;
 	int first, nstep;
 	int phase_f, phase_s;
 	void allocate();
