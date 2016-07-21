@@ -106,6 +106,7 @@ void FixNuc::post_force()
 	double *radius = particle->radius;
 	double *rho = particle->rho;
 	double *density = particle->density;
+	double *volume = particle->volume;
 	int rmass_flag = particle->rmass_flag;
 	int *mask = particle->mask;
 	int *bitmask = group->bitmask;
@@ -127,7 +128,7 @@ void FixNuc::post_force()
 		count = seed / nproc * rank;
 	}
 
-	if (update->ntimestep % 100 == 0){
+	if (update->ntimestep % 10 == 0){
 
 		for (int j = 0; j < nlocal; j++) {
 			int i = (j + update->ntimestep * seed) % nlocal;
@@ -149,6 +150,7 @@ void FixNuc::post_force()
 						rmass[i] = mass_bubble;
 						rho[i] = rho_bubble;
 						density[i] = rho_bubble;
+						volume[i] = 4.0 / 3.0 * 3.1416 * radius[i] * radius[i] * radius[i];
 						group->glocal[newgid] = group->glocal[newgid] + 1;
 						group->gparticles[newgid] = group->gparticles[newgid] + 1;
 						group->glocal[groupbit] = group->glocal[groupbit] - 1;
