@@ -64,7 +64,7 @@ void ComputePressuresph::init()
 }
 
 /* ----------------------------------------------------------------------
-   compute total pressure, averaged over Pxx, Pyy, Pzz
+   compute SPH pressure at the given point among given cutoff length
 ------------------------------------------------------------------------- */
 
 double ComputePressuresph::compute_scalar()
@@ -107,6 +107,7 @@ double ComputePressuresph::compute_scalar()
 		}
 	}
 	
+	//	communicate between processors to get the total average SPH pressure
 	MPI_Allreduce(&wfsum, &wfsumall, 1, MPI_DOUBLE, MPI_SUM, mworld);
 	MPI_Allreduce(&pressuresph, &scalar, 1, MPI_DOUBLE, MPI_SUM, mworld);
 

@@ -353,8 +353,8 @@ void FixWallLBM::pre_force_lbm(int iparticle, double sep, double *n, int iwall)
 		tz = vijtz * vijt_inv;
 		
 		fvijnx = -6 * PI * mu * vijnx * R12 * R12 / sep;
-		fvijnx = -6 * PI * mu * vijny * R12 * R12 / sep;
-		fvijnx = -6 * PI * mu * vijnz * R12 * R12 / sep;
+		fvijny = -6 * PI * mu * vijny * R12 * R12 / sep;
+		fvijnz = -6 * PI * mu * vijnz * R12 * R12 / sep;
 
 		fvijtx = -6 * PI * mu * R12 * vijtx * (8.0 / 15 * log(R12 / sep) + 0.9588);
 		fvijty = -6 * PI * mu * R12 * vijty * (8.0 / 15 * log(R12 / sep) + 0.9588);

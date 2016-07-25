@@ -23,12 +23,11 @@ using namespace PDPS_NS;
 
 ComputeLevel::ComputeLevel(PDPS *ps, int narg, char **arg) : Compute(ps, narg, arg)
 {
-	if (narg < 5) error->all(FLERR,"Illegal compute level command");
+	if (narg < 4) error->all(FLERR,"Illegal compute level command");
 
 	scalar_flag = 1;
-	frequency = atoi(arg[3]);
 	level = level_pre = 0.0; 
-	levelgap = atof(arg[4]);
+	levelgap = atof(arg[3]);
 
 
 }
@@ -48,7 +47,7 @@ void ComputeLevel::init()
 }
 
 /* ----------------------------------------------------------------------
-   compute total pressure, averaged over Pxx, Pyy, Pzz
+   compute total average height of the liquid
 ------------------------------------------------------------------------- */
 
 double ComputeLevel::compute_scalar()
@@ -62,21 +61,22 @@ double ComputeLevel::compute_scalar()
 	int level_compute = 0;
 	int level_computeall = 0;
 
-	if (update->ntimestep % frequency == 0){
-
-		double highest = findhigh();
-		if (highest > level_pre - levelgap){
-			level_compute = 1;
-			level = createtop();
-		}
-		MPI_Allreduce(&level_compute, &level_computeall, 1, MPI_INT, MPI_SUM, mworld);
-		MPI_Allreduce(&level, &scalar, 1, MPI_DOUBLE, MPI_SUM, mworld);
-		scalar = scalar / level_computeall;
-		level_pre = scalar;
+	double highest = findhigh();
+	if (highest > level_pre - levelgap){
+		level_compute = 1;
+		level = createtop();
 	}
+	MPI_Allreduce(&level_compute, &level_computeall, 1, MPI_INT, MPI_SUM, mworld);
+	MPI_Allreduce(&level, &scalar, 1, MPI_DOUBLE, MPI_SUM, mworld);
+	scalar = scalar / level_computeall;
+	level_pre = scalar;
+
 	return scalar;
 }
 
+/* ----------------------------------------------------------------------
+	find the highest point among the domain
+------------------------------------------------------------------------- */
 
 double ComputeLevel::findhigh(){
 	double **x = particle->x;
@@ -93,6 +93,9 @@ double ComputeLevel::findhigh(){
 	return highest;
 }
 
+/* ----------------------------------------------------------------------
+	choose the top 10 highest point, not the highest
+------------------------------------------------------------------------- */
 double ComputeLevel::createtop(){
 
 	int i, j, k;

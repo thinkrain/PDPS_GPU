@@ -125,7 +125,7 @@ void ReadData::command(int narg, char **arg)
 
 	// close file
 
-	if (procid = 0) {
+	if (procid == 0) {
 		fclose(fp);
 	}
 

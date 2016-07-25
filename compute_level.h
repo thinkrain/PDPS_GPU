@@ -25,17 +25,16 @@ public:
 	ComputeLevel(class PDPS *, int, char **);
 	virtual ~ComputeLevel();
 	void init();
-	//double compute_scalar();
+
 	double compute_scalar();
 	double findhigh();
 	double createtop();
 
 protected:
 
-	int frequency;
-	double level, level_pre, levelgap;
+	double level, level_pre, levelgap;	// preset lowest value for level
+										// levelgap is to prevent processor in lower value intervene the computing
 
-	//void virial_compute(int);
 };
 
 }

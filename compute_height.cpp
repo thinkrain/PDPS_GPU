@@ -51,7 +51,7 @@ void ComputeHeight::init()
 }
 
 /* ----------------------------------------------------------------------
-   compute total pressure, averaged over Pxx, Pyy, Pzz
+   compute liquid height at this point
 ------------------------------------------------------------------------- */
 
 double ComputeHeight::compute_scalar()
@@ -70,6 +70,9 @@ double ComputeHeight::compute_scalar()
 	return scalar;
 }
 
+/* ----------------------------------------------------------------------
+	get the highest point among the cutoff length, within the reference rho
+------------------------------------------------------------------------- */
 
 double ComputeHeight::findhigh(){
 	double **x = particle->x;

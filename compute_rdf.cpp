@@ -244,7 +244,7 @@ void ComputeRdf::compute_array()
 	double constant, tmp, nums, rlower, rupper;
 	double Vol_box, Vol_local;
 
-	if (domain->dim = 3) {
+	if (domain->dim == 3) {
 		Vol_box = domain->xle*domain->yle*domain->zle;
 		constant = 4.0 * PI / 3.0;  
 		for (ifield = 0; ifield < nfields; ifield++) {

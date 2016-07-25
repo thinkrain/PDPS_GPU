@@ -39,7 +39,6 @@ FixFoam::FixFoam(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 		error->all(FLERR,"Illegal fix Foam command");
 	}
 	
-	region_flag = 0;
 	neighbor_flag = level_flag = 0;
 	int iarg;
 	tid = atof(arg[3]);
@@ -92,10 +91,7 @@ void FixFoam::setup()
 void FixFoam::post_force()
 {
 	double **x = particle->x;
-	double **f = particle->f;
 	double **v = particle->v;
-	double *mass = particle->mass;
-	double *rmass = particle->rmass;
 	double *radius = particle->radius;
 	int rmass_flag = particle->rmass_flag;
 	int *mask = particle->mask;
@@ -103,13 +99,9 @@ void FixFoam::post_force()
 	int *type = particle->type;
 	int nlocal = particle->nlocal;
 	int *tag = particle->tag;
-	double temp;
-	CreateParticle createparticle(ps);
-//	RanPark *random;
-//	random = new RanPark(ps, seed);
-//	class ParticleType *ptype = particle->ptype;
-	int rised_flag = 0;
+	double temp; 
 
+	//		judge particle's leaving on liquid level computing
 	if (level_flag == 1){
 		for (int i = 0; i < nlocal; i++) {
 			if (mask[i] & groupbit) {
@@ -128,12 +120,13 @@ void FixFoam::post_force()
 			}
 		}
 	}
+	//		judge particle's leaving on its neighbor particle numbers
 	else if (neighbor_flag == 1){
 		int *numneigh;
 		int jnum;
 		numneigh = neighbor->neighlist->numneigh;
 		for (int i = 0; i < nlocal; i++){
-			if (mask[i] & groupbit && radius[i] > 0.051) {
+			if (mask[i] & groupbit && radius[i] > 0.019) {
 				jnum = numneigh[i];
 				int num_sph = 0;
 				for (int j = 0; j < jnum; j++){

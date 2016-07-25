@@ -28,16 +28,12 @@ namespace PDPS_NS {
 		virtual void init();
 		virtual void initial_integrate();
 		virtual void final_integrate();
-		//virtual void setup_pre_force(int);
-		//virtual void reset_dt();
 
-	private:
-		class NeighList *list;
+
 	protected:
 		double dtv, dtf;
-		int mass_require;
 
-		class Pair *pair;
+
 	};
 
 }

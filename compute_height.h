@@ -25,17 +25,15 @@ public:
 	ComputeHeight(class PDPS *, int, char **);
 	virtual ~ComputeHeight();
 	void init();
-	//double compute_scalar();
 	double compute_scalar();
 	double findhigh();
-	double createtop();
 
 protected:
 
-	double height, heightcut;
-	double xtemp, ytemp, z0;
-	double rho_ref;
-	//void virial_compute(int);
+	double height, heightcut;		//  cutoff length to compute height
+	double xtemp, ytemp, z0;		//  position to compute height
+	double rho_ref;					//  reference rho at the limit to compute height
+
 };
 
 }

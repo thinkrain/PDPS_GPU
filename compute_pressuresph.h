@@ -25,18 +25,18 @@ public:
 	ComputePressuresph(class PDPS *, int, char **);
 	virtual ~ComputePressuresph();
 	void init();
-	//double compute_scalar();
+
 	double compute_scalar();
 	double findpressure();
 
 
 protected:
 
-	int cubic_flag, quintic_flag;
-	double pressuresph, h, soundspeed, rho_ref;
-	double xtemp, ytemp, ztemp;
-	double a2D, a3D, wfsum;
-	//void virial_compute(int);
+	int cubic_flag, quintic_flag;					//  flag to use which kernel
+	double pressuresph, h, soundspeed, rho_ref;		//  parameters in SPH governing equation
+	double xtemp, ytemp, ztemp;						//  coordinate at which point to compute SPH pressure
+	double a2D, a3D, wfsum;							//	parameter in kernel and sum of weight function
+
 };
 
 }

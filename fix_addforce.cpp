@@ -172,7 +172,7 @@ void FixAddForce::add_drag_stokes()
 		}
 	}
 
-	if (coupled = 1){
+	if (coupled == 1){
 		int *ilist, *jlist, *numneigh, **firstneigh;
 		int inum, jnum, jtype, ii, jj, i, j;
 		double imass, h, q, wf;
