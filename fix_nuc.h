@@ -31,12 +31,12 @@ public:
 	virtual void post_force();
 	
 protected:
-	int rid, tid, newgid;                  // region id, type id, new group id
-	int region_flag;          // region enable flag
-	int frequency;
-	int direction;
-	int seed;
-	double gap;
+	int rid, tid, newgid;					 // region id, type id, new group id
+	int region_flag;						 // region enable flag
+	int frequency;							 //  frequency to control the maximum generation speed
+	int direction;							//	direction to generate particles
+	int seed;								//	rundom number to control the randomness of particle generation
+	double gap;								//	distance between the boundary at the generation particle
 	int count;
 	double radius_bubble;
 	double mass_bubble;

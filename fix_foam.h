@@ -31,16 +31,8 @@ public:
 	virtual void post_force();
 	
 protected:
-	int rid, tid, newgid, refgid;                  // region id, type id, new group id, reference group id
-	int region_flag;          // region enable flag
-	double frequency;
-	int direction;
-	double seed;
-	double gap;
-	int count;
-	double radius_bubble;
-	double mass_bubble;
-	int level_flag, neighbor_flag;
+	int rid, tid, newgid, refgid;           // region id, type id, new group id, reference group id
+	int level_flag, neighbor_flag;			//	The way to delete particle, based on liquid level or neighbor particle numbers
 	
 
 };

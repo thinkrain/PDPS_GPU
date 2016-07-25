@@ -34,8 +34,7 @@ using namespace PDPS_NS;
 
 PairSPH_COUPLE::PairSPH_COUPLE(PDPS *ps) : Pair(ps)
 {
-	random = NULL;
-	cutd = cutdsq = NULL;
+	
 	 first = 1;
 	 newton_pair = 1;
 	 local_kernel = 0;
@@ -180,7 +179,7 @@ void PairSPH_COUPLE::compute(int eflag, int vflag)
 								wf = 0.25 * (2 - q) * (2 - q) * (2 - q);
 						}
 						else if (quintic_flag == 1)
-							wf = (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (2 * q + 1);
+							wf = (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0)     * (2 * q + 1);
 
 						if (domain->dim == 3)
 							wf = wf * a3D;
@@ -208,7 +207,7 @@ void PairSPH_COUPLE::compute(int eflag, int vflag)
 
 		} // setflag[i][i]
 	} // inum  
-//  if (vflag_fdotr) virial_fdotr_compute();
+//  if vflag_fdotr) virial_fdotr_compute();
 }
 
 
@@ -245,7 +244,7 @@ void PairSPH_COUPLE::set_coeff(int narg, char **arg)
   force->bounds(arg[0], particle->ntypes, ilo, ihi);
   force->bounds(arg[1], particle->ntypes, jlo, jhi);
 
-  // coupling force between different types of particles
+  // record fluid phase and solid phase
   phase_f = atoi(arg[0]);
   phase_s = atoi(arg[1]);
 
@@ -265,14 +264,9 @@ void PairSPH_COUPLE::set_coeff(int narg, char **arg)
 		  soundspeed[j] = soundspeed_one;
 		  B[j] = B_one;
 		  viscosity[i][j] = viscosity_one;
-		  //printf("setting cut[%d][%d] = %f\n", i, j, cut_one);
 		  cut[i][j] = 2 * cut_one;
 		  cutsq[i][j] = cut[i][j] * cut[i][j];
 		  setflag[i][j] = 1;
-
-		  //cut[j][i] = cut[i][j];
-		  //viscosity[j][i] = viscosity[i][j];
-		  //setflag[j][i] = 1;
 		  count++;
 	  }
   }

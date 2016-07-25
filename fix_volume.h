@@ -28,8 +28,6 @@ public:
 	void post_force();
 	//void init();
 	void setup();
-	//double compute_vector(int);
-	//double memory_usage();
 	int gravity_flag, initial_flag, region_flag, temperature_flag;
 	int g_id, gasbit, rid;
 	double radius_origin;

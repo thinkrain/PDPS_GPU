@@ -114,19 +114,18 @@ void FixNuc::post_force()
 	int nlocal = particle->nlocal;
 	int *tag = particle->tag;
 	double temp;
-	CreateParticle createparticle(ps);
-//	RanPark *random;
-//	random = new RanPark(ps, seed);
-//	class ParticleType *ptype = particle->ptype;
+
 	int inside_flag;
 	int rised = 0;
 	
+	//	balance the speed while using more processors
 	if (update->ntimestep == 0){
 		int rank, nproc;
 		MPI_Comm_rank(mworld, &rank);
 		MPI_Comm_size(mworld, &nproc);
 		count = seed / nproc * rank;
 	}
+	
 
 	if (update->ntimestep % 10 == 0){
 
@@ -136,7 +135,7 @@ void FixNuc::post_force()
 				if (mask[i] & newgid)
 					continue;
 				count++;
-				//			temp = random->uniform();
+				//		generate a new particle, i.e. transfer a existing particle to the desired type
 				if (count > seed){
 					double coord[3];
 					coord[0] = x[i][0];
@@ -154,25 +153,12 @@ void FixNuc::post_force()
 						group->glocal[newgid] = group->glocal[newgid] + 1;
 						group->gparticles[newgid] = group->gparticles[newgid] + 1;
 						group->glocal[groupbit] = group->glocal[groupbit] - 1;
-						group->gparticles[groupbit] = group->gparticles[groupbit] - 1;
-						//			
+						group->gparticles[groupbit] = group->gparticles[groupbit] - 1;	
 					}
-					//	particle->ptype->create_particle(tid, coord);
-					//createparticle.create_single(x[i][0], x[i][1], x[i][2] + gap);
-					else if (direction == DOWN)
-						createparticle.create_single(x[i][0], x[i][1], x[i][2] - gap);
-					else if (direction == FRONT)
-						createparticle.create_single(x[i][0] + gap, x[i][1], x[i][2]);
-					else if (direction == BACK)
-						createparticle.create_single(x[i][0] - gap, x[i][1], x[i][2]);
-					else if (direction == LEFT)
-						createparticle.create_single(x[i][0], x[i][1] - gap, x[i][2]);
-					else if (direction == RIGHT)
-						createparticle.create_single(x[i][0], x[i][1] + gap, x[i][2]);
 					count = 0;
 
 				}
-				if (rised >= frequency)
+				if (rised >= frequency)		//  control the maximum generation speed
 					break;
 
 			}

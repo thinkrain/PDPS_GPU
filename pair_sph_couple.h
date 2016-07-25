@@ -36,9 +36,9 @@ protected:
 	int seed;
 	int rank;
 	int local_kernel;				//	kernel length is 1(varying among particles) 0 (uniform)
-	double **cutd, **cutdsq;
+
 	double sigma;					//  parameter to control the relationship of kernel length and density
-	class RanMars *random;
+
 	double a2D, a3D, h;
 	double *rho0, *soundspeed, *B;
 	double **viscosity;

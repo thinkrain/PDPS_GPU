@@ -38,6 +38,7 @@ FixVolume::FixVolume(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 	gravity_flag = temperature_flag = 0;
 	int iarg;
 	iarg = 3;
+	//		way to fix volume
 	while (iarg < narg) {
 		if (!strcmp(arg[iarg],"gravity")) {
 			gravity_flag = 1;
@@ -110,6 +111,7 @@ void FixVolume::post_force()
 	zlo = domain->boxlo[2];
 	zhi = domain->boxhi[2];
 	
+	//	fix volume by gravity
 	if (gravity_flag == 1){
 		for (int i = 0; i < nlocal; i++) {
 			if (mask[i] & groupbit) {
@@ -123,6 +125,7 @@ void FixVolume::post_force()
 			}
 		}
 	}
+	//	fix by temperature
 	else if (temperature_flag == 1){
 		for (int i = 0; i < nlocal; i++){
 			if (mask[i] & groupbit) {
