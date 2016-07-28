@@ -31,7 +31,7 @@ public:
 	virtual void post_force();
 	
 protected:
-	int rid, tid, newgid;					 // region id, type id, new group id
+	int rid, tid, newgid, gengid;					 // region id, type id, new group id, group of place to generation
 	int region_flag;						 // region enable flag
 	int frequency;							 //  frequency to control the maximum generation speed
 	int direction;							//	direction to generate particles

@@ -42,7 +42,7 @@ FixNuc::FixNuc(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 	int ngid = group->find_group(arg[4]);
 	newgid = group->bitmask[ngid];
 	frequency = atoi(arg[5]);
-	gap = atof(arg[6]);
+	gengid = group->find_group(arg[6]);
 	radius_bubble = atof(arg[7]);
 	mass_bubble = atof(arg[8]);
 	rho_bubble = atof(arg[9]);
@@ -117,7 +117,7 @@ void FixNuc::post_force()
 
 	int inside_flag;
 	int rised = 0;
-	
+	int gennum = group->glocal[gengid];
 	//	balance the speed while using more processors
 	if (update->ntimestep == 0){
 		int rank, nproc;
@@ -137,11 +137,22 @@ void FixNuc::post_force()
 				count++;
 				//		generate a new particle, i.e. transfer a existing particle to the desired type
 				if (count > seed){
-					double coord[3];
-					coord[0] = x[i][0];
-					coord[1] = x[i][1];
-					coord[2] = x[i][2];
+				//	double coord[3];
+				//	coord[0] = x[i][0];
+				//	coord[1] = x[i][1];
+				//	coord[2] = x[i][2];
+					int k = i % gennum;
+					int cou = 0;
+					int l = 0;
+					for (l = 0; cou < k; l++){
+						if (mask[l] & gengid)
+							cou++;
+					}
+					x[i][0] = x[l - 1][0];
+					x[i][1] = x[l - 1][1];
+					x[i][2] = x[l - 1][2];
 					rised++;
+					
 					if (direction == UP){
 						mask[i] |= newgid;
 						type[i] = tid;
