@@ -48,13 +48,9 @@ FixAddForce::FixAddForce(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 		mu = atof(arg[4]); 
 		if (strcmp(arg[5], "coupled") == 0){
 			coupled = 1;
-		
 			int itype = atoi(arg[6]);
 			int jtype = atoi(arg[7]);
-			double cutoff = atof(arg[8]);
-			force->pair[0]->setflag[itype][jtype] = 1;
-			force->pair[0]->cut[itype][jtype] = cutoff;
-		
+			cutoff = atof(arg[8]);
 		}
 			
 	}
@@ -80,6 +76,12 @@ FixAddForce::FixAddForce(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 		mu = atof(arg[4]);
 		rho = atof(arg[5]);
 		eta = atof(arg[6]);
+		if (strcmp(arg[7], "coupled") == 0){
+			coupled = 1;
+			int itype = atoi(arg[8]);
+			int jtype = atoi(arg[9]);
+			cutoff = atof(arg[10]);
+		}
 	}
 	else if (!strcmp(arg[3], "drag/felice")) {
 		force_style = DRAG_FELICE;
@@ -157,15 +159,13 @@ void FixAddForce::add_drag_stokes()
 	int *type = particle->type;
 	int nlocal = particle->nlocal;
 	double *radius = particle->radius;
+	double *volume = particle->volume;
 
-	int pair_id, itype;
+	int itype;
 	double coeff = -6 * PI * mu;
 	for (int i = 0; i < nlocal; i++) {
 		if (mask[i] & groupbit) {
 			itype = type[i];
-			pair_id = force->type2pair[itype][itype];
-			if (radius[i] < EPSILON)
-			radius[i] = 0.5 * force->pair[pair_id]->cut[itype][itype];
 			f[i][0] += coeff * radius[i] * v[i][0];
 			f[i][1] += coeff * radius[i] * v[i][1];
 			f[i][2] += coeff * radius[i] * v[i][2];
@@ -203,10 +203,9 @@ void FixAddForce::add_drag_stokes()
 					dely = ytmp - x[j][1];
 					delz = ztmp - x[j][2];
 					rsq = delx * delx + dely * dely + delz * delz;
-					pair_id = force->type2pair[itype][itype];
 					//h = force->pair[pair_id]->cut[itype][itype];
-					h = radius[i];
-					if (rsq < 4 * h * h) {
+					h = radius[i] / 2.0;
+					if (rsq < radius[i] * radius[i]) {
 
 						q = sqrt(rsq) / h;
 
@@ -219,10 +218,9 @@ void FixAddForce::add_drag_stokes()
 						else
 							wf = wf * 10.0 / 7.0 / PI / h / h;
 
-						double Volume = 4.0 / 3.0 * PI * radius[i] * radius[i] * radius[i];
-						f[j][0] -= coeff * radius[i] * v[i][0] * Volume * wf;
-						f[j][1] -= coeff * radius[i] * v[i][1] * Volume * wf;
-						f[j][2] -= coeff * radius[i] * v[i][2] * Volume * wf;
+						f[j][0] -= coeff * radius[i] * v[i][0] * volume[i] * wf;
+						f[j][1] -= coeff * radius[i] * v[i][1] * volume[i] * wf;
+						f[j][2] -= coeff * radius[i] * v[i][2] * volume[i] * wf;
 
 					}
 
@@ -240,26 +238,31 @@ void FixAddForce::add_drag_stokes()
 void FixAddForce::add_drag_general()
 {
 	double **v = particle->v;
+	double **x = particle->x;
 	double **f = particle->f;
 	double *mass = particle->mass;
 	int *mask = particle->mask;
 	double *radius = particle->radius;
+	double *volume = particle->volume;
 	int *type = particle->type;
 	int nlocal = particle->nlocal;
 	double Cd;
 
-	int rid = domain->find_region("vessel");
-	if (rid == -1) error->all(FLERR, "Cannot find the region\n");
-	double **v_coords = domain->regions[rid]->v_coords;
+//	int rid = domain->find_region("vessel");
+//	if (rid == -1) error->all(FLERR, "Cannot find the region\n");
+//	double **v_coords = domain->regions[rid]->v_coords;
 
 	double Re, coeff, xi;
 	double vel_f, v_f[3];
 	double radius_sq;
-	for (int i = 0; i < nlocal; i++) {
-		if (mask[i] & groupbit) {
-			if (particle->radius_flag) {
-				for (int j = 0; j < 3; j++) v_f[j] = v[i][j] - v_coords[0][j];
-				vel_f = (v_f[0]*v_f[0] + v_f[1]*v_f[1] + v_f[2]*v_f[2]);
+	if (coupled == 0){
+		for (int i = 0; i < nlocal; i++) {
+			if (mask[i] & groupbit) {
+				//		if (particle->radius_flag) {
+				for (int j = 0; j < 3; j++)
+					v_f[j] = v[i][j];
+				//	v_f[j] = v[i][j] - v_coords[0][j];
+				vel_f = (v_f[0] * v_f[0] + v_f[1] * v_f[1] + v_f[2] * v_f[2]);
 				vel_f = sqrt(vel_f);
 				Re = eta * rho * vel_f * 2 * radius[i] / mu;
 				if (Re > EPSILON) {
@@ -268,15 +271,97 @@ void FixAddForce::add_drag_general()
 						Cd = (0.63 + 4.8 / sqrt(Re));
 						Cd = Cd * Cd;
 					}
-					xi = 3.7 - 0.65*exp(-(1.5 - log10(Re))*(1.5 - log10(Re)) / 2);
+					//				xi = 3.7 - 0.65*exp(-(1.5 - log10(Re))*(1.5 - log10(Re)) / 2);
 					// Fd = 0.5 * rho * vel_relative^2 * Cd * pi * R^2
 					radius_sq = radius[i] * radius[i];
-					coeff = 0.5 * rho * PI * radius_sq * pow(eta, 1 - xi);
+					//				coeff = 0.5 * rho * PI * radius_sq * pow(eta, 1 - xi);
+					coeff = 0.5 * rho * PI * radius_sq;
 					f[i][0] += (-coeff * Cd * v_f[0] * vel_f);
 					f[i][1] += (-coeff * Cd * v_f[1] * vel_f);
 					f[i][2] += (-coeff * Cd * v_f[2] * vel_f);
 				}
+				//		}
 			}
+		}
+	}
+	else if (coupled == 1){
+		int *ilist, *jlist, *numneigh, **firstneigh;
+		int inum, jnum, jtype, ii, jj, i, j, itype;
+		double imass, h, q, wf;
+		double xtmp, ytmp, ztmp, delx, dely, delz, rsq;
+		inum = neighbor->neighlist->inum;
+		ilist = neighbor->neighlist->ilist;
+		numneigh = neighbor->neighlist->numneigh;
+		firstneigh = neighbor->neighlist->firstneigh;
+
+
+		// add density at each particle via kernel function overlap
+		for (ii = 0; ii < inum; ii++) {
+			i = ilist[ii];
+			if (mask[i] & groupbit){
+				xtmp = x[i][0];
+				ytmp = x[i][1];
+				ztmp = x[i][2];
+				itype = type[i];
+				jlist = firstneigh[i];
+				jnum = numneigh[i];
+
+				for (int j = 0; j < 3; j++)
+					v_f[j] = v[i][j];
+				//	v_f[j] = v[i][j] - v_coords[0][j];
+				vel_f = (v_f[0] * v_f[0] + v_f[1] * v_f[1] + v_f[2] * v_f[2]);
+				vel_f = sqrt(vel_f);
+				Re = eta * rho * vel_f * 2 * radius[i] / mu;
+				if (Re > EPSILON) {
+					if (Re < 0.5) Cd = 24 / Re;
+					else {
+						Cd = (0.63 + 4.8 / sqrt(Re));
+						Cd = Cd * Cd;
+					}
+					//				xi = 3.7 - 0.65*exp(-(1.5 - log10(Re))*(1.5 - log10(Re)) / 2);
+					// Fd = 0.5 * rho * vel_relative^2 * Cd * pi * R^2
+					radius_sq = radius[i] * radius[i];
+					//				coeff = 0.5 * rho * PI * radius_sq * pow(eta, 1 - xi);
+					coeff = 0.5 * rho * PI * radius_sq;
+					f[i][0] += (-coeff * Cd * v_f[0] * vel_f);
+					f[i][1] += (-coeff * Cd * v_f[1] * vel_f);
+					f[i][2] += (-coeff * Cd * v_f[2] * vel_f);
+				}
+
+				for (jj = 0; jj < jnum; jj++) {
+					j = jlist[jj];
+					if (mask[i] == mask[j])
+						continue;
+					jtype = type[j];
+					delx = xtmp - x[j][0];
+					dely = ytmp - x[j][1];
+					delz = ztmp - x[j][2];
+					rsq = delx * delx + dely * dely + delz * delz;
+					//h = force->pair[pair_id]->cut[itype][itype];
+					h = radius[i] / 2.0;
+					if (rsq < radius[i] * radius[i]) {
+
+						q = sqrt(rsq) / h;
+
+						if (q < 1)
+							wf = 1 - 1.5 * q * q + 0.75 * q * q * q;
+						else
+							wf = 0.25 * (2 - q) * (2 - q) * (2 - q);
+						if (domain->dim == 3)
+							wf = wf * 1.0 / PI / h / h / h;
+						else
+							wf = wf * 10.0 / 7.0 / PI / h / h;
+
+						f[j][0] -= (-coeff * Cd * v_f[0] * vel_f) * volume[i] * wf;
+						f[j][1] -= (-coeff * Cd * v_f[1] * vel_f) * volume[i] * wf;
+						f[j][2] -= (-coeff * Cd * v_f[2] * vel_f) * volume[i] * wf;
+
+					}
+
+				}
+			}
+
+
 		}
 	}
 }
@@ -400,16 +485,16 @@ void FixAddForce::add_buoyancy()
 
 	double R; 
 	int pair_id, itype;
-	double coeff = 4.0 / 3 * PI * (rho_ref - rho) *g;
+	double coeff = 4.0 / 3.0 * PI * (rho_ref - rho) *g;
 	for (int i = 0; i < nlocal; i++) {
 		if (mask[i] & groupbit) {
 			R = particle->radius[i];
-			if (R < EPSILON){
-				itype = type[i];
-				pair_id = force->type2pair[itype][itype];
-				particle->radius[i] = 0.5 * force->pair[pair_id]->cut[itype][itype];
-				R = particle->radius[i];
-			}
+		//	if (R < EPSILON){
+		//		itype = type[i];
+		//		pair_id = force->type2pair[itype][itype];
+		//		particle->radius[i] = 0.5 * force->pair[pair_id]->cut[itype][itype];
+		//		R = particle->radius[i];
+		//	}
 		
 			f[i][g_dim] += coeff * R * R * R;
 		}
