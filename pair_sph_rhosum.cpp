@@ -131,7 +131,6 @@ void PairSPH_RHOSUM::compute(int eflag, int vflag)
 	firstneigh = neighbor->neighlist->firstneigh;
 
 	// loop over neighbors of my particles
-//	printf("before pair timestep = %d procid = %d rho[0] = %f\n", update->ntimestep, parallel->procid, rho[0]);
 	if ((update->ntimestep % nstep) == 0) {
 
 		// initialize density with self-contribution,
@@ -147,12 +146,12 @@ void PairSPH_RHOSUM::compute(int eflag, int vflag)
 				else {
 					// Cubic spline kernel, 2d
 					wf = a2D;
-					//wf = 0.89 / (h * h);
 				}
 				rho[i] = imass * wf;
 			}
 			
 		}
+		//	set all ghost particle's rho zero to be computed
 		if (particle->nghost > 0){
 			for (i = nlocal; i < nlocal + particle->nghost; i++){
 				itype = type[i];
@@ -211,15 +210,16 @@ void PairSPH_RHOSUM::compute(int eflag, int vflag)
 			}
 
 		}
-	
+		// particles get its rho part in neighbor processors, so that they can get complete rho
 		parallel->reverse_comm_pair(this);
+		//	after getting the correct rho, update its value to its neighbor processors
 		parallel->forward_comm_pair(this);
 
 		for (i = 0; i < 0; i++){
 			itype = type[i];
 			xtmp = x[i][0];
 			ytmp = x[i][1];
-			ztmp = x[i][2];	//  if this is low density at boundary
+			ztmp = x[i][2];	
 
 			if (domain->dim == 3)
 				drho[i] = a3D / rho[i];
@@ -251,14 +251,9 @@ void PairSPH_RHOSUM::compute(int eflag, int vflag)
 						wf = wf * a3D;
 					else
 						wf = wf * a2D;
-					if (!(mask[i] & bcbit))
-						drho[i] += mass[jtype] * wf / rho[j];
-					if (!(mask[j] & bcbit))
-						drho[j] += mass[itype] * wf / rho[i];
 				}
 
 			}
-			//	use drho[i] to store new rho[i] temporarily
 
 		}
 
@@ -309,14 +304,9 @@ void PairSPH_RHOSUM::set_coeff(int narg, char **arg)
 		rho0[i] = rho0_one;
 		for (int j = MAX(jlo, i); j <= jhi; j++) {
 			rho0[j] = rho0_one;
-			//printf("setting cut[%d][%d] = %f\n", i, j, cut_one);
 			cut[i][j] = 2 * cut_one;
 			cutsq[i][j] = cut[i][j] * cut[i][j];
 			setflag[i][j] = 1;
-
-			//cut[j][i] = cut[i][j];
-			//viscosity[j][i] = viscosity[i][j];
-			//setflag[j][i] = 1;
 			count++;
 		}
 	}
@@ -363,6 +353,10 @@ double PairSPH_RHOSUM::single(int i, int j, int itype, int jtype,
 	return 0.0;
 }
 
+/* ----------------------------------------------------------------------
+	pack particle's rho to neighbor processors during reverse communication
+------------------------------------------------------------------------- */
+
 int PairSPH_RHOSUM::pack_reverse_comm(int n, int first, double *buf) {
 	int i, m, last;
 	double *rho = particle->rho;
@@ -375,7 +369,9 @@ int PairSPH_RHOSUM::pack_reverse_comm(int n, int first, double *buf) {
 	return m;
 }
 
-/* ---------------------------------------------------------------------- */
+/* ----------------------------------------------------------------------
+	unpack particle's rho from neighbor processors during reverse communication
+------------------------------------------------------------------------- */
 
 void PairSPH_RHOSUM::unpack_reverse_comm(int n, int *list, double *buf) {
 	int i, m, j;
@@ -394,7 +390,10 @@ void PairSPH_RHOSUM::unpack_reverse_comm(int n, int *list, double *buf) {
 	}
 }
 
-/* ---------------------------------------------------------------------- */
+/* ----------------------------------------------------------------------
+	pack particle's rho to neighbor processors during forward communication
+------------------------------------------------------------------------- */
+
 int PairSPH_RHOSUM::pack_forward_comm(int n, int *list,  double *buf) {
 	int i, m, j; 
 	double *rho = particle->rho;
@@ -407,7 +406,9 @@ int PairSPH_RHOSUM::pack_forward_comm(int n, int *list,  double *buf) {
 	return m;
 }
 
-/* ---------------------------------------------------------------------- */
+/* ----------------------------------------------------------------------
+	unpack particle's rho from neighbor processors during forward communication
+------------------------------------------------------------------------- */
 
 void PairSPH_RHOSUM::unpack_forward_comm(int n, int first, double *buf) {
 	int i, m, last;
