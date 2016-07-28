@@ -26,14 +26,15 @@ using namespace FixConst;
 
 FixAcc::FixAcc(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 {
-	if (narg < 5) {
+	if (narg < 6) {
 		error->all(FLERR,"Illegal fix acc command");
 	}
 	
 	xacc = yacc = zacc = 0.0;
 
 	region_flag = 0;
-
+	atomic_flag = 0;
+	sphere_flag = 0;
 	int iarg;
 	iarg = 3;
 	while (iarg < narg) {
@@ -41,7 +42,11 @@ FixAcc::FixAcc(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 			if (!strcmp(arg[iarg+1],"x")) xacc = atof(arg[iarg+2]);
 			if (!strcmp(arg[iarg+1],"y")) yacc = atof(arg[iarg+2]);
 			if (!strcmp(arg[iarg+1],"z")) zacc = atof(arg[iarg+2]);
-			iarg += 3;
+			if (narg > iarg + 3){
+				if (!strcmp(arg[iarg + 3], "atomic")) atomic_flag = 1;
+				if (!strcmp(arg[iarg + 3], "sphere")) sphere_flag = 1;
+			}
+			iarg += 4;
 		}
 		else if (!strcmp(arg[iarg], "region")) {
 			rid = domain->find_region(arg[iarg+1]);
@@ -106,7 +111,7 @@ void FixAcc::post_force()
 				inside_flag = domain->regions[rid]->inside(x[i]);
 				if (inside_flag == 0) continue;
 			}
-			if (rmass_flag) 
+			if (sphere_flag) 
 				massone = rmass[i];
 			else massone = mass[type[i]];
 			f[i][0] += massone*xacc;

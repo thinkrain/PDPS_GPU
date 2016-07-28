@@ -34,6 +34,7 @@ protected:
 	double xacc, yacc, zacc;
 	int rid;                  // region id
 	int region_flag;          // region enable flag
+	int atomic_flag, sphere_flag;
 };
 }
 
