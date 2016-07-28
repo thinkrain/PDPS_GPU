@@ -35,7 +35,7 @@ enum{UP, DOWN, FRONT, BACK, LEFT, RIGHT};
 
 FixFoam::FixFoam(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 {
-	if (narg < 6) {
+	if (narg < 8) {
 		error->all(FLERR,"Illegal fix Foam command");
 	}
 	
@@ -53,7 +53,8 @@ FixFoam::FixFoam(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 
 	ngid = group->find_group(arg[6]);
 	refgid = group->bitmask[ngid];
-
+	radius_initial = atof(arg[7]);
+	neighbor_delete = atof(arg[8]);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -126,14 +127,14 @@ void FixFoam::post_force()
 		int jnum;
 		numneigh = neighbor->neighlist->numneigh;
 		for (int i = 0; i < nlocal; i++){
-			if (mask[i] & groupbit && radius[i] > 0.019) {
+			if (mask[i] & groupbit && radius[i] > radius_initial + 0.0001) {
 				jnum = numneigh[i];
 				int num_sph = 0;
 				for (int j = 0; j < jnum; j++){
 					if (mask[j] == 3)
 						num_sph++;
 				}
-				if (num_sph < 10){
+				if (num_sph < neighbor_delete){
 
 					x[i][2] = domain->boxhi[2] + domain->xle;
 					mask[i] = 1;
