@@ -13,3 +13,4 @@
 #include "pair_sph_idealgas.h"
 #include "pair_sph_lj.h"
 #include "pair_sph_rhosumlocalAV.h"
+#include "pair_sph_rhosuminclusion.h"
