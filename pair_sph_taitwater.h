@@ -32,17 +32,11 @@ public:
     double single(int, int, int, int, double, double, double, double &);
 
 protected:
-	double cut_global, temperature;
-	int seed;
-	int rank;
-	double **cutd, **cutdsq;
-	double a2D, a3D, h;
-	class RanMars *random;
+	double a2D, a3D, h;					//	parameters in SPH governing equation
 	double *rho0, *soundspeed, *B;
 	double **viscosity;
 	int first;
-	int cubic_flag, quintic_flag;
-	int bcbit;
+	int cubic_flag, quintic_flag;		//	flag to choose which kernel function
 	void allocate();
 };
 

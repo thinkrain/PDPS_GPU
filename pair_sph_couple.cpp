@@ -109,6 +109,7 @@ void PairSPH_COUPLE::compute(int eflag, int vflag)
   double *de = particle->de;
   double *drho = particle->drho;
   double *poro = particle->poro;
+  double *radius = particle->radius;
   double *volume = particle->volume;
   double *hlocal = particle->hlocal;
   int *type = particle->type;
@@ -144,7 +145,7 @@ void PairSPH_COUPLE::compute(int eflag, int vflag)
 //	calcuate the coupling force on other phase
 	double weight;
 	double fx, fy, fz;
-	for (ii = 0; ii < inum; ii++) {
+	for (ii = 0; ii < 0; ii++) {
 		i = ilist[ii];
 
 		itype = type[i];
@@ -169,7 +170,7 @@ void PairSPH_COUPLE::compute(int eflag, int vflag)
 					dely = ytmp - x[j][1];
 					delz = ztmp - x[j][2];
 					rsq = delx * delx + dely * dely + delz * delz;
-					if (rsq < cutsq[itype][jtype]) {
+					if (rsq < radius[i]) {
 						q = sqrt(rsq) / h;
 
 						if (cubic_flag == 1){
