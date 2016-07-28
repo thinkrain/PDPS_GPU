@@ -96,6 +96,7 @@ void FixVolume::post_force()
 	double **x = particle->x;
 	double *density = particle->density;
 	double *radius = particle->radius;
+	double *volume = particle->volume;
 	double *rmass = particle->rmass;
 	double xlo,xhi,ylo,yhi,zlo,zhi;
 	int *type = particle->type;
@@ -131,6 +132,8 @@ void FixVolume::post_force()
 			if (mask[i] & groupbit) {
 				dr = 2.0 / 3.0 * (T_liq - T_boil) / T_boil * Latent * rho_bub / rho_liq * update->dt;
 				radius[i] = radius[i] + dr;
+				volume[i] = 4.0 / 3.0 * PI * radius[i] * radius[i] * radius[i];
+				rmass[i] = rho_bub * volume[i];
 			}
 		}
 
