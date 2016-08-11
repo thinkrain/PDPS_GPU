@@ -15,3 +15,5 @@
 #include "fix_setenergy.h"
 #include "fix_nuc.h"
 #include "fix_foam.h"
+#include "fix_transform.h"
+#include "fix_average.h"
