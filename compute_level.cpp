@@ -64,7 +64,8 @@ double ComputeLevel::compute_scalar()
 	double highest = findhigh();
 	if (highest > level_pre - levelgap){
 		level_compute = 1;
-		level = createtop();
+		//level = createtop();
+		level = highest;
 	}
 	MPI_Allreduce(&level_compute, &level_computeall, 1, MPI_INT, MPI_SUM, mworld);
 	MPI_Allreduce(&level, &scalar, 1, MPI_DOUBLE, MPI_SUM, mworld);
@@ -102,7 +103,7 @@ double ComputeLevel::createtop(){
 	double **x = particle->x;
 	int *mask = particle->mask;
 	int nlocal = particle->nlocal;
-	double top[10];
+	double top[3];
 	for (i = 0; i < 10; i++)
 		top[i] = 0.0;
 	for (i = 0; i < nlocal; i++){
