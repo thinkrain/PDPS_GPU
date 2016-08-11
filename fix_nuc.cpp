@@ -141,16 +141,16 @@ void FixNuc::post_force()
 				//	coord[0] = x[i][0];
 				//	coord[1] = x[i][1];
 				//	coord[2] = x[i][2];
-					int k = i % gennum;
-					int cou = 0;
-					int l = 0;
-					for (l = 0; cou < k; l++){
-						if (mask[l] & gengid)
-							cou++;
-					}
-					x[i][0] = x[l - 1][0];
-					x[i][1] = x[l - 1][1];
-					x[i][2] = x[l - 1][2];
+				//	int k = i % gennum;
+				//	int cou = 0;
+				//	int l = 0;
+				//	for (l = 0; cou < k; l++){
+				//		if (mask[l] & gengid)
+				//			cou++;
+				//	}
+				//	x[i][0] = x[l - 1][0];
+				//	x[i][1] = x[l - 1][1];
+				//	x[i][2] = x[l - 1][2];
 					rised++;
 					
 					if (direction == UP){
