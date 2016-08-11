@@ -213,6 +213,9 @@ void DumpCustom::parse_field(char *str)
 		else if (strcmp(word, "rho") == 0) {
 			addfield("rho", &DumpCustom::pack_rho, DOUBLE);
 		}
+		else if (strcmp(word, "poro") == 0) {
+			addfield("poro", &DumpCustom::pack_poro, DOUBLE);
+		}
 		word = strtok(NULL," \0");
 	}
 }
@@ -510,6 +513,18 @@ void DumpCustom::pack_rho(int n)
 
 	for (int i = 0; i < nselected; i++) {
 		buf[n] = rho[selected_list[i]];
+		n += nfields;
+	}
+}
+
+/* ---------------------------------------------------------------------- */
+
+void DumpCustom::pack_poro(int n)
+{
+	double *poro = particle->poro;
+
+	for (int i = 0; i < nselected; i++) {
+		buf[n] = poro[selected_list[i]];
 		n += nfields;
 	}
 }

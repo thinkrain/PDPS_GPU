@@ -85,6 +85,7 @@ protected:
 	void pack_density(int);
 	void pack_energy(int);
 	void pack_rho(int);
+	void pack_poro(int);
 
 	void allocate();    
 	void write_fx();
