@@ -32,9 +32,11 @@ public:
 	
 protected:
 	int rid, tid, newgid, refgid;           // region id, type id, new group id, reference group id
-	int level_flag, neighbor_flag;			//	The way to delete particle, based on liquid level or neighbor particle numbers
+	int level_flag, neighbor_flag, pressure_flag;			//	The way to delete particle, based on liquid level or neighbor particle numbers
 	double radius_initial;					//	inital value of radius, to prevent early deletion
 	int neighbor_delete;					//  minimun number of neighbor particles to delete
+	double frequency, frequency0, rho_ref, v_ref;				//  frequency to do deletion, reference density, reference velocity, for pressure_flag
+	int step_last, step_next;				//	record the last and next step to fix
 
 };
 }
