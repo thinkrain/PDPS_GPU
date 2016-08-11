@@ -145,7 +145,7 @@ void PairSPH_COUPLE::compute(int eflag, int vflag)
 //	calcuate the coupling force on other phase
 	double weight;
 	double fx, fy, fz;
-	for (ii = 0; ii < 0; ii++) {
+	for (ii = 0; ii < nlocal; ii++) {
 		i = ilist[ii];
 
 		itype = type[i];
