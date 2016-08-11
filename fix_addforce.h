@@ -46,6 +46,7 @@ public:
 	int cell[3];
 	int ndims;
 	double *voidage, *vol_solid, *vol_solid_total;
+	double voi, voi_ref;
 	int rid;
 
 	void add_drag_stokes();
@@ -56,7 +57,7 @@ public:
 
 	// buoyancy
 	int g_dim;
-	double rho, g, rho_ref;
+	double g, rho_ref;
 	double cutoff;
 	void add_buoyancy();
 

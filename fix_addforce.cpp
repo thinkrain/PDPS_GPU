@@ -66,39 +66,39 @@ FixAddForce::FixAddForce(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 			g_dim = 2;
 		}
 		else error->all(FLERR, "Illegal fix addforce buoyancy options");
-		rho = atof(arg[5]);
+		rho_ref = atof(arg[5]);
 		g = atof(arg[6]);
-		rho_ref = atof(arg[7]);
 		
 	}
 	else if (!strcmp(arg[3], "drag/general")) {
 		force_style = DRAG_GENERAL;
 		mu = atof(arg[4]);
-		rho = atof(arg[5]);
+		rho_ref = atof(arg[5]);
 		eta = atof(arg[6]);
 		if (strcmp(arg[7], "coupled") == 0){
 			coupled = 1;
-			int itype = atoi(arg[8]);
-			int jtype = atoi(arg[9]);
-			cutoff = atof(arg[10]);
 		}
 	}
 	else if (!strcmp(arg[3], "drag/felice")) {
 		force_style = DRAG_FELICE;
 		mu = atof(arg[4]);
-		rho = atof(arg[5]);
-		cle[2] = atof(arg[6]);
-		cle[0] = 0.0;
-		cle[1] = 0.0;
-		if (!strcmp(arg[7], "region")) {
-			rid = domain->find_region(arg[8]);
-			if (rid == -1) error->all(FLERR, "Cannot find region id");
+		rho_ref = atof(arg[5]);
+		voi_ref = atof(arg[6]);
+		if (strcmp(arg[7], "coupled") == 0){
+			coupled = 1;
 		}
-		cell[0] = cell[1] = 1;
-		cell[2] = static_cast<int> (domain->regions[rid]->extent_le[2] / cle[2]);
-		voidage = new double[cell[2]];
-		vol_solid = new double[cell[2]];
-		vol_solid_total = new double[cell[2]];
+//		cle[2] = atof(arg[6]);
+//		cle[0] = 0.0;
+//		cle[1] = 0.0;
+//		if (strcmp(arg[7], "region") == 0) {
+//			rid = domain->find_region(arg[8]);
+//			if (rid == -1) error->all(FLERR, "Cannot find region id");
+//		}
+//		cell[0] = cell[1] = 1;
+//		cell[2] = static_cast<int> (domain->regions[rid]->extent_le[2] / cle[2]);
+//		voidage = new double[cell[2]];
+//		vol_solid = new double[cell[2]];
+//		vol_solid_total = new double[cell[2]];
 	}
 	else if (strcmp(arg[3], "custom") == 0) {
 		force_style = CUSTOM;
@@ -264,7 +264,7 @@ void FixAddForce::add_drag_general()
 				//	v_f[j] = v[i][j] - v_coords[0][j];
 				vel_f = (v_f[0] * v_f[0] + v_f[1] * v_f[1] + v_f[2] * v_f[2]);
 				vel_f = sqrt(vel_f);
-				Re = eta * rho * vel_f * 2 * radius[i] / mu;
+				Re = eta * rho_ref * vel_f * 2 * radius[i] / mu;
 				if (Re > EPSILON) {
 					if (Re < 0.5) Cd = 24 / Re;
 					else {
@@ -272,10 +272,10 @@ void FixAddForce::add_drag_general()
 						Cd = Cd * Cd;
 					}
 					//				xi = 3.7 - 0.65*exp(-(1.5 - log10(Re))*(1.5 - log10(Re)) / 2);
-					// Fd = 0.5 * rho * vel_relative^2 * Cd * pi * R^2
+					// Fd = 0.5 * rho_ref * vel_relative^2 * Cd * pi * R^2
 					radius_sq = radius[i] * radius[i];
-					//				coeff = 0.5 * rho * PI * radius_sq * pow(eta, 1 - xi);
-					coeff = 0.5 * rho * PI * radius_sq;
+					//				coeff = 0.5 * rho_ref * PI * radius_sq * pow(eta, 1 - xi);
+					coeff = 0.5 * rho_ref * PI * radius_sq;
 					f[i][0] += (-coeff * Cd * v_f[0] * vel_f);
 					f[i][1] += (-coeff * Cd * v_f[1] * vel_f);
 					f[i][2] += (-coeff * Cd * v_f[2] * vel_f);
@@ -294,7 +294,7 @@ void FixAddForce::add_drag_general()
 		numneigh = neighbor->neighlist->numneigh;
 		firstneigh = neighbor->neighlist->firstneigh;
 
-
+		
 		// add density at each particle via kernel function overlap
 		for (ii = 0; ii < inum; ii++) {
 			i = ilist[ii];
@@ -311,7 +311,7 @@ void FixAddForce::add_drag_general()
 				//	v_f[j] = v[i][j] - v_coords[0][j];
 				vel_f = (v_f[0] * v_f[0] + v_f[1] * v_f[1] + v_f[2] * v_f[2]);
 				vel_f = sqrt(vel_f);
-				Re = eta * rho * vel_f * 2 * radius[i] / mu;
+				Re = eta * rho_ref * vel_f * 2 * radius[i] / mu;
 				if (Re > EPSILON) {
 					if (Re < 0.5) Cd = 24 / Re;
 					else {
@@ -319,10 +319,10 @@ void FixAddForce::add_drag_general()
 						Cd = Cd * Cd;
 					}
 					//				xi = 3.7 - 0.65*exp(-(1.5 - log10(Re))*(1.5 - log10(Re)) / 2);
-					// Fd = 0.5 * rho * vel_relative^2 * Cd * pi * R^2
+					// Fd = 0.5 * rho_ref * vel_relative^2 * Cd * pi * R^2
 					radius_sq = radius[i] * radius[i];
-					//				coeff = 0.5 * rho * PI * radius_sq * pow(eta, 1 - xi);
-					coeff = 0.5 * rho * PI * radius_sq;
+					//				coeff = 0.5 * rho_ref * PI * radius_sq * pow(eta, 1 - xi);
+					coeff = 0.5 * rho_ref * PI * radius_sq;
 					f[i][0] += (-coeff * Cd * v_f[0] * vel_f);
 					f[i][1] += (-coeff * Cd * v_f[1] * vel_f);
 					f[i][2] += (-coeff * Cd * v_f[2] * vel_f);
@@ -377,52 +377,146 @@ void FixAddForce::add_drag_felice()
 	double *mass = particle->mass;
 	int *mask = particle->mask;
 	double *radius = particle->radius;
+	double *rho = particle->rho;
+	double *volume = particle->volume;
 	int *type = particle->type;
 	int nlocal = particle->nlocal;
 	double Cd;
 	
-	double **coords = domain->regions[rid]->coords;
-	double **v_coords = domain->regions[rid]->v_coords;
+//	double **coords = domain->regions[rid]->coords;
+//	double **v_coords = domain->regions[rid]->v_coords;
 
-	compute_voidage();
+	//compute_voidage();
 
 	double Re, coeff, xi;
 	double vel_f, v_f[3];
 	double radius_sq;
 	int cid, inside_flag;
-	for (int i = 0; i < nlocal; i++) {
-		if (mask[i] & groupbit) {
-			if (particle->radius_flag) {
-				for (int j = 0; j < 3; j++) v_f[j] = v[i][j] - v_coords[0][j];
+	if (coupled == 0){
+		for (int i = 0; i < nlocal; i++) {
+			if (mask[i] & groupbit) {
+				for (int j = 0; j < 3; j++) v_f[j] = v[i][j];// -v_coords[0][j];
 				vel_f = (v_f[0] * v_f[0] + v_f[1] * v_f[1] + v_f[2] * v_f[2]);
 				vel_f = sqrt(vel_f);
-				inside_flag = domain->regions[rid]->inside(x[i]);
-				if (inside_flag == 0) {
-					continue;
-				}
-				cid = static_cast<int> ((x[i][2]-coords[0][2]) / cle[2]);
-				if (cid == cell[2]) cid--;
-				if (cid < 0 || cid > cell[2]) {
-					error->warning(FLERR, "Check code: compute_voidage()");
-				}
-				Re = voidage[cid] * rho * vel_f * 2 * radius[i] / mu;
+//				inside_flag = domain->regions[rid]->inside(x[i]);
+//				if (inside_flag == 0) {
+//					continue;
+//				}
+				//	cid = static_cast<int> ((x[i][2]-coords[0][2]) / cle[2]);
+				//	if (cid == cell[2]) cid--;
+				//	if (cid < 0 || cid > cell[2]) {
+				//		error->warning(FLERR, "Check code: compute_voidage()");
+				//	}
+				Re = rho_ref * vel_f * 2 * radius[i] / mu;
 				if (Re > EPSILON) {
 					if (Re < 0.5) Cd = 24 / Re;
 					else {
 						Cd = (0.63 + 4.8 / sqrt(Re));
 						Cd = Cd * Cd;
 					}
+					voi = rho[i] / rho_ref;
 					xi = 3.7 - 0.65*exp(-(1.5 - log10(Re))*(1.5 - log10(Re)) / 2);
-					// Fd = 0.5 * rho * vel_relative^2 * Cd * pi * R^2
+					// Fd = 0.5 * rho_ref * vel_relative^2 * Cd * pi * R^2
 					radius_sq = radius[i] * radius[i];
-					coeff = 0.5 * rho * PI * radius_sq * pow(voidage[cid], 1 - xi);
-					f[i][0] += (-coeff * Cd * v_f[0] * vel_f);
-					f[i][1] += (-coeff * Cd * v_f[1] * vel_f);
-					f[i][2] += (-coeff * Cd * v_f[2] * vel_f);
+					if (voi > voi_ref){
+						coeff = 0.5 * rho_ref * PI * radius_sq * pow(voi, -xi);
+						f[i][0] += (-coeff * Cd * v_f[0] * vel_f);
+						f[i][1] += (-coeff * Cd * v_f[1] * vel_f);
+						f[i][2] += (-coeff * Cd * v_f[2] * vel_f);
+					}
 				}
 			}
 		}
 	}
+	else if (coupled == 1){
+		int *ilist, *jlist, *numneigh, **firstneigh;
+		int inum, jnum, jtype, ii, jj, i, j, itype;
+		double imass, h, q, wf;
+		double xtmp, ytmp, ztmp, delx, dely, delz, rsq;
+		inum = neighbor->neighlist->inum;
+		ilist = neighbor->neighlist->ilist;
+		numneigh = neighbor->neighlist->numneigh;
+		firstneigh = neighbor->neighlist->firstneigh;
+
+
+		// add density at each particle via kernel function overlap
+		for (int i = 0; i < nlocal; i++) {
+			if (mask[i] & groupbit) {
+				xtmp = x[i][0];
+				ytmp = x[i][1];
+				ztmp = x[i][2];
+				itype = type[i];
+				jlist = firstneigh[i];
+				jnum = numneigh[i];
+				for (int j = 0; j < 3; j++) v_f[j] = v[i][j];// -v_coords[0][j];
+				vel_f = (v_f[0] * v_f[0] + v_f[1] * v_f[1] + v_f[2] * v_f[2]);
+				vel_f = sqrt(vel_f);
+//				inside_flag = domain->regions[rid]->inside(x[i]);
+		//		if (inside_flag == 0) {
+	//				continue;
+	//			}
+				//	cid = static_cast<int> ((x[i][2]-coords[0][2]) / cle[2]);
+				//	if (cid == cell[2]) cid--;
+				//	if (cid < 0 || cid > cell[2]) {
+				//		error->warning(FLERR, "Check code: compute_voidage()");
+				//	}
+				Re = rho_ref * vel_f * 2 * radius[i] / mu;
+				if (Re > EPSILON) {
+					if (Re < 0.5) Cd = 24 / Re;
+					else {
+						Cd = (0.63 + 4.8 / sqrt(Re));
+						Cd = Cd * Cd;
+					}
+					voi = rho[i] / rho_ref;
+					xi = 3.7 - 0.65*exp(-(1.5 - log10(Re))*(1.5 - log10(Re)) / 2);
+					// Fd = 0.5 * rho_ref * vel_relative^2 * Cd * pi * R^2
+					radius_sq = radius[i] * radius[i];
+					if (voi > voi_ref){
+						coeff = 0.5 * rho_ref * PI * radius_sq * pow(voi, -xi);
+						f[i][0] += (-coeff * Cd * v_f[0] * vel_f);
+						f[i][1] += (-coeff * Cd * v_f[1] * vel_f);
+						f[i][2] += (-coeff * Cd * v_f[2] * vel_f);
+					}
+				}
+
+				for (jj = 0; jj < jnum; jj++) {
+					j = jlist[jj];
+					if (mask[i] == mask[j])
+						continue;
+					jtype = type[j];
+					delx = xtmp - x[j][0];
+					dely = ytmp - x[j][1];
+					delz = ztmp - x[j][2];
+					rsq = delx * delx + dely * dely + delz * delz;
+					//h = force->pair[pair_id]->cut[itype][itype];
+					h = radius[i] / 2.0;
+					if (rsq < radius[i] * radius[i]) {
+
+						q = sqrt(rsq) / h;
+
+						if (q < 1)
+							wf = 1 - 1.5 * q * q + 0.75 * q * q * q;
+						else
+							wf = 0.25 * (2 - q) * (2 - q) * (2 - q);
+						if (domain->dim == 3)
+							wf = wf * 1.0 / PI / h / h / h;
+						else
+							wf = wf * 10.0 / 7.0 / PI / h / h;
+
+						f[j][0] -= (-coeff * Cd * v_f[0] * vel_f) * volume[i] * wf;
+						f[j][1] -= (-coeff * Cd * v_f[1] * vel_f) * volume[i] * wf;
+						f[j][2] -= (-coeff * Cd * v_f[2] * vel_f) * volume[i] * wf;
+
+					}
+
+				}
+
+			}
+		}
+
+
+	}
+	
 }
 
 /* ---------------------------------------------------------------------- */
@@ -485,7 +579,7 @@ void FixAddForce::add_buoyancy()
 
 	double R; 
 	int pair_id, itype;
-	double coeff = 4.0 / 3.0 * PI * (rho_ref - rho) *g;
+	double coeff = 4.0 / 3.0 * PI * rho_ref *g;
 	for (int i = 0; i < nlocal; i++) {
 		if (mask[i] & groupbit) {
 			R = particle->radius[i];
