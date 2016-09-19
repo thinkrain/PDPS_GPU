@@ -1243,3 +1243,62 @@ void Parallel::forward_comm_pair(Pair *pair)
 
 	} // for (int iswap = iswap; iswap >= 0; iswap++)
 }
+
+/* ----------------------------------------------------------------------
+forward communication of particle force every timestep
+other per-particle attributes may also be sent via pack/unpack routines
+------------------------------------------------------------------------- */
+
+void Parallel::forward_force(int dummy)
+{
+	int n;
+	MPI_Request request;
+	MPI_Status status;
+	double **f = particle->f;
+	double *buf;
+	ParticleType *ptype = particle->ptype;
+
+	// exchange data with another proc
+	// if other proc is self, just copy
+	// if comm_x_only set, exchange or copy directly to x, don't unpack
+
+	for (int iswap = 0; iswap < nswap; iswap++) {
+		if (sendproc[iswap] != procid) {
+			if (comm_f_only) {
+				if (recvnum[iswap]) buf = f[firstrecv[iswap]];
+				else buf = NULL;
+				if (recvnum[iswap])
+					MPI_Irecv(buf, recvnum[iswap] * size_reverse, MPI_DOUBLE,
+					recvproc[iswap], 0, mworld, &request);
+				n = ptype->pack_force(sendnum[iswap], sendlist[iswap],
+					buf_send, pbc_flag[iswap], pbc[iswap]);
+				if (n) MPI_Send(buf_send, n, MPI_DOUBLE, sendproc[iswap], 0, mworld);
+				if (recvnum[iswap]) MPI_Wait(&request, &status);
+			}
+			else {
+				if (recvnum[iswap])
+					MPI_Irecv(buf_recv, recvnum[iswap] * size_reverse, MPI_DOUBLE,
+					recvproc[iswap], 0, mworld, &request);
+				
+				n = ptype->pack_force(sendnum[iswap], sendlist[iswap], buf_send, pbc_flag[iswap], pbc[iswap]);
+
+				if (n) MPI_Send(buf_send, n, MPI_DOUBLE, sendproc[iswap], 0, mworld);
+				if (recvnum[iswap]) MPI_Wait(&request, &status);
+				ptype->unpack_force(recvnum[iswap], firstrecv[iswap], buf_recv);
+			}
+		} // if (sendproc[iswap] != procid)
+		else {
+			if (comm_f_only) {
+				if (sendnum[iswap])
+					n = ptype->pack_force(sendnum[iswap], sendlist[iswap],
+					f[firstrecv[iswap]], pbc_flag[iswap],
+					pbc[iswap]);
+			}
+			else {
+				n = ptype->pack_force(sendnum[iswap], sendlist[iswap],
+					buf_send, pbc_flag[iswap], pbc[iswap]);
+				ptype->unpack_force(recvnum[iswap], firstrecv[iswap], buf_send);
+			}
+		} // if (sendproc[iswap] = procid)
+	} // for (int iswap = 0; iswap < nswap; iswap++)
+}

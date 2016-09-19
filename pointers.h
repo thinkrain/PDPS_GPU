@@ -35,27 +35,28 @@ typedef int bigint;
 class Pointers {
 public:
 	Pointers(PDPS *ptr) :
-	  ps(ptr),
-	  memory(ptr->memory),
-	  error(ptr->error),
-	  universe(ptr->universe),
-	  input(ptr->input),
-	  particle(ptr->particle),
-	  update(ptr->update),
-	  neighbor(ptr->neighbor),
-	  parallel(ptr->parallel),
-	  domain(ptr->domain),
-      force(ptr->force),
-      modify(ptr->modify),
-      group(ptr->group),
-      output(ptr->output),
-      timer(ptr->timer),
-      mworld(ptr->mworld),
-      infile(ptr->infile),
-      screen(ptr->screen),
-	  //multiscale(ptr->multiscale),
-	  postprocessor(ptr->postprocessor),
-      logfile(ptr->logfile) {}
+	ps(ptr),
+	memory(ptr->memory),
+	error(ptr->error),
+	universe(ptr->universe),
+	input(ptr->input),
+	particle(ptr->particle),
+	update(ptr->update),
+	neighbor(ptr->neighbor),
+	parallel(ptr->parallel),
+	domain(ptr->domain),
+	force(ptr->force),
+	modify(ptr->modify),
+	group(ptr->group),
+	output(ptr->output),
+	timer(ptr->timer),
+	mworld(ptr->mworld),
+	infile(ptr->infile),
+	screen(ptr->screen),
+	//multiscale(ptr->multiscale),
+	postprocessor(ptr->postprocessor),
+	cudaEngine(ptr->cudaEngine),
+    logfile(ptr->logfile) {}
     virtual ~Pointers() {}
 
 protected:
@@ -65,6 +66,7 @@ protected:
 	Universe *&universe;
 	Input *&input;
 
+	//CUDAParticle *&particle;
 	Particle *&particle;
 	Update *&update;
 	Neighbor *&neighbor;
@@ -76,6 +78,8 @@ protected:
 	Output *&output;
 	PostProcessor *&postprocessor;
 	Timer *&timer;
+
+	CUDAEngine *&cudaEngine;
 
 	// Multiscale test
 	//MultiScale *&multiscale;

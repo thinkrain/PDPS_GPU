@@ -99,11 +99,36 @@ public:
 	int map_find_hash(int);
 
 	void lost_check();
+	int map_tag_max;
+
+	//	variable in GPU
+	int *devTag;
+	int *devType;
+	int *devMask;
+	double *devMass;
+	double *devCoordX;
+	double	*devCoordY;
+	double	*devCoordZ;
+	double	*devForceX;
+	double	*devForceY;
+	double	*devForceZ;
+	double	*devVeloX;
+	double	*devVeloY;
+	double	*devVeloZ;
+
+	// pointer to pre-allocated device buffer
+	double	*devHostCoord;
+	double	*devHostVelo;
+	double	*devHostForce;
+	int *devHostTag;
+	int *devHostType;
+	int *devHostMask;
+	double	*devHostMassType;
 
 private:
 	int procid;
 
-	int map_tag_max;
+	
 	int *map_array;
 
 	struct HashElem {

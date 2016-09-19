@@ -41,7 +41,7 @@ namespace PDPS_NS {
 		int nstep, first;
 		void allocate();
 		double a2D, a3D, h;										//	parameters in SPH governing equation
-		int sgid, sgroupbit;									//	group bit for solid particles
+		int sgid, sgroupbit, lgid, lgroupbit;					//	group bit for liquid particles and solid particles
 		double *rho0, *soundspeed, *B;							//	parameters in SPH governing equation
 		int cubic_flag, quintic_flag;							//	flag to use which kernel function
 	};

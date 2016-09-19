@@ -42,6 +42,8 @@ PairSPH_COUPLE::PairSPH_COUPLE(PDPS *ps) : Pair(ps)
 	 sigma = 1.5;
 	 cut = NULL;
 	 cutsq = NULL;
+	 poro_flag = 0;
+	 poroset_flag = 0;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -164,13 +166,13 @@ void PairSPH_COUPLE::compute(int eflag, int vflag)
 				j = jlist[jj];
 				//     j &= NEIGHMASK;
 				jtype = type[j];
-				jmass = mass[jtype];
 				if (jtype == phase_f){
+					jmass = mass[jtype];
 					delx = xtmp - x[j][0];
 					dely = ytmp - x[j][1];
 					delz = ztmp - x[j][2];
 					rsq = delx * delx + dely * dely + delz * delz;
-					if (rsq < radius[i]) {
+					if (rsq < cutsq[itype][jtype]) {
 						q = sqrt(rsq) / h;
 
 						if (cubic_flag == 1){
@@ -204,6 +206,59 @@ void PairSPH_COUPLE::compute(int eflag, int vflag)
 				f[i][0] = fx / weight * volume[i] * rho0[phase_f] / jmass;
 				f[i][1] = fy / weight * volume[i] * rho0[phase_f] / jmass;
 				f[i][2] = fz / weight * volume[i] * rho0[phase_f] / jmass;
+
+				if (poroset_flag == 1){
+					f[i][0] = f[i][0] / poroset;
+					f[i][1] = f[i][1] / poroset;
+					f[i][2] = f[i][2] / poroset;
+				}
+				if (poro_flag == 1){
+					f[i][0] = f[i][0] / (1 - poro[i]);
+					f[i][1] = f[i][1] / (1 - poro[i]);
+					f[i][2] = f[i][2] / (1 - poro[i]);
+
+				}
+				
+
+				for (jj = 0; jj < jnum; jj++) {
+					j = jlist[jj];
+					//     j &= NEIGHMASK;
+					jtype = type[j];
+					jmass = mass[jtype];
+					if (jtype == phase_f){
+						delx = xtmp - x[j][0];
+						dely = ytmp - x[j][1];
+						delz = ztmp - x[j][2];
+						rsq = delx * delx + dely * dely + delz * delz;
+						if (rsq < radius[i]) {
+							q = sqrt(rsq) / h;
+
+							if (cubic_flag == 1){
+								if (q < 1)
+									wf = 1 - 1.5 * q * q + 0.75 * q * q * q;
+								else
+									wf = 0.25 * (2 - q) * (2 - q) * (2 - q);
+							}
+							else if (quintic_flag == 1)
+								wf = (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0)     * (2 * q + 1);
+
+							if (domain->dim == 3)
+								wf = wf * a3D;
+							else
+								wf = wf * a2D;
+
+							f[j][0] -= f[i][0] * wf / weight;
+							f[j][1] -= f[i][1] * wf / weight;
+							f[j][2] -= f[i][2] * wf / weight;
+
+						}		//  rsq < cutsq
+
+
+
+					}		//  setflag[j][j]
+
+				}		//  jnum
+
 			}
 
 		} // setflag[i][i]
@@ -225,6 +280,13 @@ void PairSPH_COUPLE::set_style(int narg, char **arg)
 		quintic_flag = 1;
 	else
 		error->all(FLERR, "Wrong Kernel function");
+	if (strcmp(arg[2], "poro") == 0)
+		poro_flag = 1;
+	else if (strcmp(arg[2], "poroset") == 0){
+		poroset_flag = 1;
+		poroset = atof(arg[3]);
+	}
+
 
 }
 

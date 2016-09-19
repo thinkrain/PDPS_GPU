@@ -17,3 +17,6 @@
 #include "fix_foam.h"
 #include "fix_transform.h"
 #include "fix_average.h"
+#include "fix_move.h"
+#include "fix_setvelocity.h"
+#include "fix_couplesph.h"

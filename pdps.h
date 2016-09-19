@@ -24,6 +24,7 @@ class PDPS {
   class Input *input;            // input script processing
                                  // ptrs to top-level LAMMPS-specific classes
   class Particle *particle;      // atom-based quantities
+  //class CUDAParticle *particle;
   class Update *update;          // integrators/minimizers
   class Neighbor *neighbor;      // neighbor lists
   class Parallel *parallel;              // "May not be used"- inter-processor communication
@@ -37,6 +38,8 @@ class PDPS {
 
   // Multiscale test
   class MultiScale *multiscale;        
+
+  class CUDAEngine *cudaEngine;
 
   MPI_Comm mworld;               // MPI world
   FILE *infile;                  // infile

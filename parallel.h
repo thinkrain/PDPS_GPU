@@ -41,6 +41,7 @@ public:
 	void cart_map(int, int *, int *, int [3][2], int ***);
 
 	void forward_comm(int dummy = 0);   // forward comm of x and v
+	void forward_force(int dummy = 0);   // forward comm of x and v
 	void reverse_comm();                // reverse comm of forces
 	void reverse_comm_pair(class Pair *);
 	void forward_comm_pair(class Pair *);

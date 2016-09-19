@@ -34,6 +34,7 @@ public:
  private:
 	double fx, fy, fz;
 	int coupled;
+	double h;
 	int force_style;
 
 	// drag_stokes
@@ -46,7 +47,8 @@ public:
 	int cell[3];
 	int ndims;
 	double *voidage, *vol_solid, *vol_solid_total;
-	double voi, voi_ref;
+	double voi, voi_ref, voiset;
+	int voiset_flag;
 	int rid;
 
 	void add_drag_stokes();

@@ -785,3 +785,43 @@ bigint ParticleTypeSph::memory_usage()
 
 	return 0;
 }
+
+/* ---------------------------------------------------------------------- */
+
+void ParticleTypeSph::unpack_force(int n, int first, double *buf)
+{
+	int i, m, last;
+
+	m = 0;
+	last = first + n;
+	for (i = first; i < last; i++) {
+		f[i][0] = buf[m++];
+		f[i][1] = buf[m++];
+		f[i][2] = buf[m++];
+		drho[i] = buf[m++];
+		de[i] = buf[m++];
+	}
+}
+
+/* ---------------------------------------------------------------------- */
+
+int ParticleTypeSph::pack_force(int n, int *list, double *buf,
+	int pbc_flag, int *pbc)
+{
+	int i, j, m;
+	double dx, dy, dz;
+
+	m = 0;
+
+	for (i = 0; i < n; i++) {
+		j = list[i];
+		buf[m++] = f[j][0];
+		buf[m++] = f[j][1];
+		buf[m++] = f[j][2];
+		buf[m++] = drho[j];
+		buf[m++] = de[j];
+	}
+
+
+	return m;
+}

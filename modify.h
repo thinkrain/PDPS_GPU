@@ -11,7 +11,7 @@
 #define PS_MODIFY_H
 
 #include "stdio.h"
-#include "pointers.h"
+//#include "pointers.h"
 
 namespace PDPS_NS {
 

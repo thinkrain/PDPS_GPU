@@ -142,34 +142,37 @@ void PairSPH_RHOSUMLOCALAV::compute(int eflag, int vflag)
 		// initialize density with self-contribution,
 		for (i = 0; i < nlocal; i++) {
 			itype = type[i];
-			if (setflag[itype][itype]){
-				imass = mass[itype];
-				if (domain->dim == 3) {
+			if (domain->dim == 3) {
 
-					// Cubic spline kernel, 3d
-					wf = a3D;
-				}
-				else {
-					// Cubic spline kernel, 2d
-					wf = a2D;
-				}
+				// Cubic spline kernel, 3d
+				wf = a3D;
+			}
+			else {
+				// Cubic spline kernel, 2d
+				wf = a2D;
+			}
+			if (mask[i] & lgroupbit){
+				imass = mass[itype];
 				rho[i] = imass * wf;
 				poro[i] = 0.0;
 			}
-			else if (mask[i] & sgroupbit)
-				rho[i] = 0.0;
+			else if (mask[i] & sgroupbit){
+				poro[i] = volume[i] *wf;
+			}
+
 			
 		}
 		//	set all ghost particle's rho and porosity zero to be computed
 		if (particle->nghost > 0){
 			for (i = nlocal; i < nlocal + particle->nghost; i++){
 				itype = type[i];
-				if (setflag[itype][itype]){
+				if (mask[i] & lgroupbit){
 					rho[i] = 0.0;
 					poro[i] = 0.0;
 				}
-				if (mask[i] & sgroupbit)
-					rho[i] = 0.0;
+				if (mask[i] & sgroupbit){
+					poro[i] = 0.0;
+				}
 					
 			}
 		}
@@ -210,25 +213,29 @@ void PairSPH_RHOSUMLOCALAV::compute(int eflag, int vflag)
 							wf = wf * a2D;
 
 						//  detect solid particle for local average
-						if (mask[i] & sgroupbit && setflag[jtype][jtype]){
-							rho[i] += mass[jtype] * wf;
+						if (mask[i] & sgroupbit && mask[j] & lgroupbit){
+							poro[i] += volume[i] * wf;
 							poro[j] += volume[i] * wf;
 							if (inclusion_flag == 1)
 								rho[j] += rho0[jtype] * volume[i] * wf;
 
 						}
-						else if (mask[j] & sgroupbit && setflag[itype][itype]){
-							rho[j] += mass[itype] * wf;
+						else if (mask[j] & sgroupbit && mask[i] & lgroupbit){
+							poro[j] += volume[j] * wf;
 							poro[i] += volume[j] * wf;
 							if (inclusion_flag == 1)
 								rho[i] += rho0[itype] * volume[j] * wf;
 						}
+						else if (mask[j] & sgroupbit && mask[i] & sgroupbit){
+							poro[j] += volume[i] * wf;
+							poro[i] += volume[j] * wf;
+						}
 						else {
-							if (setflag[itype][itype]){
+							if (mask[i] & lgroupbit){
 								rho[i] += mass[jtype] * wf;
 							}
 
-							if (setflag[jtype][jtype]){
+							if (mask[j] & lgroupbit){
 								rho[j] += mass[itype] * wf;
 							}
 						}
@@ -245,7 +252,7 @@ void PairSPH_RHOSUMLOCALAV::compute(int eflag, int vflag)
 		if (poro_flag == 1){
 			for (i = 0; i < nlocal; i++){
 				itype = type[i];
-				if (setflag[itype][itype])
+				if (mask[i] & lgroupbit)
 					rho[i] = rho[i] / (1 - poro[i]);
 			}
 		}
@@ -274,17 +281,25 @@ void PairSPH_RHOSUMLOCALAV::set_style(int narg, char **arg)
 		error->all(FLERR, "Wrong Kernel function");
 	nstep = atoi(arg[2]);
 
-	sgid = group->find_group(arg[3]);
-	if (sgid == -1) {
+	lgid = group->find_group(arg[3]);
+	if (lgid == -1) {
 		char str[128];
 		sprintf(str, "Cannot find group id: %s", arg[3]);
 		error->all(FLERR, str);
 	}
+	lgroupbit = group->bitmask[lgid];
+
+	sgid = group->find_group(arg[4]);
+	if (sgid == -1) {
+		char str[128];
+		sprintf(str, "Cannot find group id: %s", arg[4]);
+		error->all(FLERR, str);
+	}
 	sgroupbit = group->bitmask[sgid];
 
-	if (strcmp(arg[4], "poro") == 0)
+	if (strcmp(arg[5], "poro") == 0)
 		poro_flag = 1;
-	else if (strcmp(arg[4], "inclusion") == 0)
+	else if (strcmp(arg[5], "inclusion") == 0)
 		inclusion_flag = 1;
 
 }
@@ -368,11 +383,13 @@ pack particle's rho to neighbor processors during reverse communication
 int PairSPH_RHOSUMLOCALAV::pack_reverse_comm(int n, int first, double *buf) {
 	int i, m, last;
 	double *rho = particle->rho;
+	double *poro = particle->poro;
 
 	m = 0;
 	last = first + n;
 	for (i = first; i < last; i++) {
 		buf[m++] = rho[i];
+		buf[m++] = poro[i];
 	}
 	return m;
 }
@@ -384,17 +401,18 @@ unpack particle's rho from neighbor processors during reverse communication
 void PairSPH_RHOSUMLOCALAV::unpack_reverse_comm(int n, int *list, double *buf) {
 	int i, m, j;
 	double *rho = particle->rho;
-	int *type = particle->type;
+	int *mask = particle->mask;
+	double *poro = particle->poro;
 	int jtype;
 	m = 0;
 
 	for (i = 0; i < n; i++) {
 		j = list[i];
-		jtype = type[j];
-		if (setflag[jtype][jtype])
+		if (mask[j] & lgroupbit)
 			rho[j] += buf[m++];
 		else
 			m++;
+		poro[j] += buf[m++];
 	}
 }
 
@@ -405,11 +423,13 @@ pack particle's rho to neighbor processors during forward communication
 int PairSPH_RHOSUMLOCALAV::pack_forward_comm(int n, int *list, double *buf) {
 	int i, m, j;
 	double *rho = particle->rho;
+	double *poro = particle->poro;
 
 	m = 0;
 	for (i = 0; i < n; i++) {
 		j = list[i];
 		buf[m++] = rho[j];
+		buf[m++] = poro[j];
 	}
 	return m;
 }
@@ -421,11 +441,13 @@ unpack particle's rho from neighbor processors during forward communication
 void PairSPH_RHOSUMLOCALAV::unpack_forward_comm(int n, int first, double *buf) {
 	int i, m, last;
 	double *rho = particle->rho;
+	double *poro = particle->poro;
 
 	m = 0;
 	last = first + n;
 	for (i = first; i < last; i++) {
 		rho[i] = buf[m++];
+		poro[i] = buf[m++];
 	}
 
 }

@@ -112,7 +112,6 @@ void V_Verlet::run(int n)
 		if (n_pre_integrate) modify->pre_integrate();
 		// first integration of Verlet algorithm
 		modify->initial_integrate();
-
 		if (n_post_integrate) modify->post_integrate();
 
 		// build neighbor

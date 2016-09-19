@@ -51,6 +51,9 @@ public:
 	virtual int pack_reverse(int, int, double *) = 0;
 	virtual void unpack_reverse(int, int *, double *) = 0;
 
+	virtual int pack_force(int, int *, double *, int, int *) = 0;
+	virtual void unpack_force(int, int, double *) = 0;
+
 	virtual void data_particle(double *, char **) = 0;
 	//virtual void data_particles(int, char *) = 0;
 	virtual void data_vel(int, char **) = 0;

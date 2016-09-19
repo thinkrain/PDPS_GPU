@@ -27,10 +27,12 @@
 #include "output.h"
 #include "parallel.h"
 #include "particle.h"
+//#include "cuda_particle.h"
 #include "pdps.h"
 #include "post_processor.h"
 #include "timer.h"
 #include "update.h"
+#include "cuda_engine.h"
 
 using namespace PDPS_NS;
 
@@ -39,6 +41,24 @@ using namespace PDPS_NS;
 PDPS::PDPS(int narg, char** arg, MPI_Comm world) 
 {
 	mworld = world;
+
+	int    device = 0;
+	string profile;
+
+	int iarg = 1;
+	//	set the GPU information
+	while (iarg < narg){
+		if (strcmp(arg[iarg], "-device") == 0) {
+			if (iarg + 1 > narg) error->all(FLERR, "Invalid command-line argument");
+			device = atoi(arg[++iarg]);
+			iarg++;
+		}
+		else if (strcmp(arg[iarg], "-profile") == 0) {
+			if (iarg + 1 > narg) error->all(FLERR, "Invalid command-line argument");
+			profile = arg[++iarg];
+			iarg++;
+		}
+	}
 
 	parallel = NULL;
 	parallel = new Parallel(this);
@@ -50,6 +70,9 @@ PDPS::PDPS(int narg, char** arg, MPI_Comm world)
 	output = NULL;
     output = new Output(this);
 
+	cudaEngine = NULL;
+	cudaEngine = new CUDAEngine(this, device, profile);
+//	class CUDAEngine *cudaEngine;
 	int inflag = 0;
 	int screenflag = 0;
 	int logflag = 0;
@@ -182,5 +205,6 @@ void PDPS::destroy()
 	delete particle;             // particle must come after modify, neighbor
 	delete postprocessor;
 	delete timer;
+	delete cudaEngine;
 }
 

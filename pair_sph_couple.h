@@ -38,7 +38,8 @@ protected:
 	int local_kernel;				//	kernel length is 1(varying among particles) 0 (uniform)
 
 	double sigma;					//  parameter to control the relationship of kernel length and density
-
+	int poro_flag, poroset_flag;
+	double poroset;
 	double a2D, a3D, h;
 	double *rho0, *soundspeed, *B;
 	double **viscosity;
