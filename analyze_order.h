@@ -35,6 +35,7 @@ private:
 	int rid;
 	int method;
 	double order;
+	double r_cut;
 
 	int ndims;
 	int dim[3];

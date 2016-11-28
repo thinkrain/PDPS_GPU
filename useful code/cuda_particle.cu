@@ -44,6 +44,7 @@ using namespace std;
 double CUDAParticle::LoadFactor = 0.5;
 CUDAParticle::CUDAParticle(PDPS *ps) : Pointers(ps)
 {
+
 	HashTableSize = 0;
 	//cudaAvec = NULL;
 	devMapArray = NULL;

@@ -17,6 +17,8 @@
 #include "post_processor.h"
 #include "timer.h"
 
+#include "force.h"
+#include "modify.h"
 #include "neighbor.h"
 
 using namespace PDPS_NS;
@@ -42,13 +44,36 @@ void PostProcessor::finalize()
 	sprintf(str,"Time Elapsed = %g\n", timer->time_all[TIME_LOOP]);
 	output->print(str);
 	
-	sprintf(str,"Time spent on PAIR: %g\n",timer->time_all[TIME_PAIR]);
-	output->print(str);
+	/*sprintf(str,"Time spent on PAIR: %g\n",timer->time_all[TIME_PAIR]);
+	output->print(str);*/
+
+	for (int i = 0; i < force->npairs; i++){
+		sprintf(str, "TIME spent on PAIR%d: %g\n", i + 1, timer->time_all[TIME_PAIR1 + i]);
+		output->print(str);
+	}
+	for (int i = 0; i < modify->n_pre_force; i++){
+		sprintf(str, "TIME spent on PREFIX%d: %g\n", i + 1, timer->time_all[TIME_PREFIX1 + i]);
+		output->print(str);
+	}
+	for (int i = 0; i < modify->n_post_force; i++){
+		sprintf(str, "TIME spent on POSTFIX%d: %g\n", i + 1, timer->time_all[TIME_FIX1 + i]);
+		output->print(str);
+	}
+
 	
 	sprintf(str,"TIME spent on NEIGHBOR: %g\n",timer->time_all[TIME_NEIGHBOR]);
 	output->print(str);
 
 	sprintf(str,"TIME spent on COMM: %g\n",timer->time_all[TIME_COMM]);
+	output->print(str);
+
+	sprintf(str, "TIME spent on Update: %g\n", timer->time_all[TIME_UPDATE]);
+	output->print(str);
+
+	sprintf(str, "TIME spent on SETUP: %g\n", timer->time_all[TIME_SETUP]);
+	output->print(str);
+
+	sprintf(str, "TIME spent on Analyze: %g\n", timer->time_all[TIME_ANALYZE]);
 	output->print(str);
 
 	sprintf(str,"TIME spent on OUTPUT: %g\n",timer->time_all[TIME_OUTPUT]);

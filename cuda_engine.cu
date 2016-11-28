@@ -63,11 +63,11 @@ int CUDAEngine::Init(int Device, string Profile)
 		fprintf(stderr, "ERR 0X%X, Mapped memory is not supported by this GPU, quiting...", CUDA_DEVICE_CANNOT_MAP_HOST_MEMORY);
 		exit(CUDA_DEVICE_CANNOT_MAP_HOST_MEMORY);
 	}
-	if (!DeviceProp.unifiedAddressing)
-	{
-		fprintf(stderr, "ERR 0X%X, Unified Virtual Addressing (UVA) is not supported by this GPU, quiting...", CUDA_DEVICE_NOT_SUPPORT_UVA);
-		exit(CUDA_DEVICE_NOT_SUPPORT_UVA);
-	}
+	//if (!DeviceProp.unifiedAddressing)
+	//{
+	//	fprintf(stderr, "ERR 0X%X, Unified Virtual Addressing (UVA) is not supported by this GPU, quiting...", CUDA_DEVICE_NOT_SUPPORT_UVA);
+	//	exit(CUDA_DEVICE_NOT_SUPPORT_UVA);
+	//}
 	// create stream
 	for (int s = 0; s < 16; s++)
 	{

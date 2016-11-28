@@ -6,7 +6,7 @@
 
    See the README file in the PDPS directory.
 ------------------------------------------------------------------------- */
-#include <omp.h>
+//#include <omp.h>
 #include <limits>
 #include "math.h"
 #include "stdlib.h"
@@ -27,7 +27,7 @@
 #include "particle.h"
 #include "update.h"
 
-#define NUM_THREADS 12
+//#define NUM_THREADS 12
 #define PI 3.1416
 
 using namespace PDPS_NS;
@@ -67,10 +67,11 @@ AnalyzeOrder::AnalyzeOrder(PDPS *ps, int narg, char **arg) : Analyze(ps, narg, a
 	num_cell = NULL;
 	numAll_cell = NULL;
 
-	nevery = atoi(arg[4]);
-	nrepeat = atoi(arg[5]);
-	nfreq = atoi(arg[6]);
-	rid = domain->find_region(arg[7]);
+	r_cut = atof(arg[4]);
+	nevery = atoi(arg[5]);
+	nrepeat = atoi(arg[6]);
+	nfreq = atoi(arg[7]);
+	rid = domain->find_region(arg[8]);
 	if (rid == -1) error->all(FLERR, "Cannot find the region id");
 
 	nfields_initial = narg - 6;
@@ -82,11 +83,7 @@ AnalyzeOrder::AnalyzeOrder(PDPS *ps, int narg, char **arg) : Analyze(ps, narg, a
 	int iarg = 3;
 	parse_fields(iarg, narg, arg);
 
-
-
-
-	
-	iarg = 8;
+	iarg = 9;
 	// parse options
 	while (iarg < narg) {
 		if (strcmp(arg[iarg], "file") == 0) {
@@ -441,13 +438,13 @@ void AnalyzeOrder::orientationalorder()
 	int nlocal = particle->nlocal;
 	double **x = particle->x;
 	int *type = particle->type;
-
+	int *mask = particle->mask;
 
 	
-	double r_cut, rij, rijsq, r_cutsq;
-	double sum[NUM_THREADS], sum_none[NUM_THREADS];
-	int  num_none;						
-	
+	double rij, rijsq, r_cutsq;
+//	double sum[NUM_THREADS], sum_none[NUM_THREADS];
+	double sum;
+	int sum_type, sum_none;					
 	
 	int *ilist;
 
@@ -456,28 +453,24 @@ void AnalyzeOrder::orientationalorder()
 
 
 	ilist = neighbor->neighlist->ilist;
-	int inum;
-	inum = neighbor->neighlist->inum;
 	firstneigh = neighbor->neighlist->firstneigh;
 	numneigh = neighbor->neighlist->numneigh;
-	r_cut = 1.0;
-	r_cutsq = 1.6;
+	r_cutsq = 2.5 * r_cut * r_cut;
 
+//#pragma omp parallel
+//	{
 
-#pragma omp parallel
-	{
-
-		int i, j, ii, jj, jnum, itype, jtype, id;
-		int num_neigh;
-		double xtmp, ytmp, ztmp, delx, dely, delz;
-		double *thita, *fi;								// relative angle of neighbor particles
-		double ***Y;									// Spherical Harnomics of each particle
-		double *order_local;							// orientational order metric of every point
-		order_local = (double *) memory->smalloc(nparticles * sizeof(double), "Local Orientational Order");
-		thita = (double *)memory->smalloc(sizeof(double), "thita");
-		fi = (double *)memory->smalloc(sizeof(double), "thita");
-		int *jlist;
-	// Spherical Harnomics for each point 
+	int i, j, ii, jj, jnum, itype, jtype, id;
+	int num_neigh;
+	double xtmp, ytmp, ztmp, delx, dely, delz;
+	double *thita, *fi;								// relative angle of neighbor particles
+	double ***Y;									// Spherical Harnomics of each particle
+//	double *order_local;							// orientational order metric of every point
+//	order_local = (double *) memory->smalloc(nlocal * sizeof(double), "Local Orientational Order");
+	thita = (double *)memory->smalloc(sizeof(double), "thita");
+	fi = (double *)memory->smalloc(sizeof(double), "thita");
+	int *jlist;
+// Spherical Harnomics for each point 
 	
 	Y = (double ***) memory->smalloc(100 * sizeof(double **), "Local Y");
 	for (jj = 0; jj < 100; jj++){
@@ -488,23 +481,29 @@ void AnalyzeOrder::orientationalorder()
 			Y[jj][m][1] = 0;
 		}
 	}
-	double Yr, Yi;
-
-	id = omp_get_thread_num();
+	double Yr[13] = { 0.0 };
+	double Yi[13] = { 0.0 };
+	int num_bond = 0;
+//	id = omp_get_thread_num();
 	// loop all the particles and compute orientational order from the neighbor particles
-	for (ii = id, sum[id] = 0.0, sum_none[id] = 0.0 ; ii < inum; ii = ii + NUM_THREADS) {
+//	for (ii = id, sum[id] = 0.0, sum_none[id] = 0.0 ; ii < inum; ii = ii + NUM_THREADS) {
+
+	for (ii = 0; ii < nlocal; ii++ ){
 		i = ilist[ii];
+		if (!(mask[i] & groupbit))
+			continue;
 		itype = type[i];
 		xtmp = x[i][0];
 		ytmp = x[i][1];
 		ztmp = x[i][2];
-
+		num_neigh = 0;
 		jlist = firstneigh[i];
 		jnum = numneigh[i];
-		num_neigh = 0;
-
 		for (jj = 0; jj < jnum; jj++) {
 			j = jlist[jj];
+			jtype = type[j];
+			if (!(mask[j] & groupbit))
+				continue;
 			jtype = type[j];
 			delx = xtmp - x[j][0];
 			dely = ytmp - x[j][1];
@@ -513,53 +512,65 @@ void AnalyzeOrder::orientationalorder()
 			if (rijsq < r_cutsq){
 				if (rijsq < EPSILON)
 					continue;
-				j = jlist[jj];
-				jtype = type[j];
 				anglecalculate(i, j, thita, fi);
-				num_neigh++;
 				for (int m = 0; m < 13; m++)
-					sphericalharmonics(Y[jj][m], m - 6, 6, thita[0], fi[0]);
+					sphericalharmonics(Y[num_neigh][m], m - 6, 6, *thita, *fi);
+				num_neigh++;
 			}
-
 		}
-		order_local[i] = 0;
+//		order_local[i] = 0;
 
 		// if no bond within cutoff distance, exclude the point from the order calculation
-		if (num_neigh == 0){
-			sum_none[id] = sum_none[id] + 1;
-			continue;
-		}
+		if (num_neigh != 0){
+		//	sum_none[id] = sum_none[id] + 1;
+			// every local order is the average of the Y or each bond
+			for (int m = 0; m < 13; m++){
 
-		// every local order is the average of the Y or each bond
-		for (int m = 0; m < 13; m++){
-			Yr = 0;
-			Yi = 0;
-			for (jj = 0; jj < jnum; jj++){
-				Yr += Y[jj][m][0];
-				Yi += Y[jj][m][1];
+				for (jj = 0; jj < num_neigh; jj++){
+					Yr[m] += Y[jj][m][0];
+					Yi[m] += Y[jj][m][1];
+				}
+				//Yr = Yr / num_neigh;
+				//Yi = Yi / num_neigh;
+				//order_local[i] = order_local[i] + Yr * Yr + Yi * Yi;
 			}
-			Yr = Yr / num_neigh;
-			Yi = Yi / num_neigh;
-			order_local[i] = order_local[i] + Yr * Yr + Yi * Yi;
-		}
-		order_local[i] = sqrt(4 * PI / 13 * order_local[i]);
-		sum[id] = sum[id] + order_local[i];
+			num_bond += num_neigh;
+			//order_local[i] = sqrt(4 * PI / 13 * order_local[i]);
+			//	sum[id] = sum[id] + order_local[i];
+			//sum = sum + order_local[i];
+	
+	}
 	}
 
 	// order is the average of all the local order
 	
-	memory->destroy(order_local);
+//	memory->destroy(order_local);
 	memory->destroy(Y);
 	memory->destroy(thita);
 	memory->destroy(fi);
-	}
+//	}
 	order = 0;
-	num_none = 0;
-	for (int i = 0; i < NUM_THREADS; i++){
-		order += sum[i]; 
-		num_none += sum_none[i];
+
+//	for (int i = 0; i < NUM_THREADS; i++){
+//		order += sum[i]; 
+//		num_none += sum_none[i];
+//	}
+	double Yrall[13], Yiall[13];
+	int num_bondall;
+	for (int m = 0; m < 13; m++){
+		MPI_Allreduce(&Yr[m], &Yrall[m], 1, MPI_DOUBLE, MPI_SUM, mworld);
+		MPI_Allreduce(&Yi[m], &Yiall[m], 1, MPI_DOUBLE, MPI_SUM, mworld);
 	}
-	order = order / (inum - num_none);
+	MPI_Allreduce(&num_bond, &num_bondall, 1, MPI_INT, MPI_SUM, mworld);
+	//MPI_Allreduce(&sum, &order, 1, MPI_DOUBLE, MPI_SUM, mworld);
+	//MPI_Allreduce(&numlocal, &numall, 1, MPI_INT, MPI_SUM, mworld);
+	for (int m = 0; m < 13; m++){
+		Yrall[m] /= num_bondall;
+		Yiall[m] /= num_bondall;
+		order += Yrall[m] * Yrall[m] + Yiall[m] * Yiall[m];
+	}
+	order = sqrt(4 * PI / 13 * order);
+	//order /= numall;
 
 }
 
@@ -641,14 +652,23 @@ void AnalyzeOrder::anglecalculate(int i, int j, double *thita, double *fi)
 	double **x = particle->x;
 	double rij, xi, xj, xij;
 	xi = x[j][0] - x[i][0];
-	xj = x[j][1] - x[j][1];
+	xj = x[j][1] - x[i][1];
 	rij = sqrt((x[i][0] - x[j][0]) * (x[i][0] - x[j][0]) + (x[i][1] - x[j][1]) * (x[i][1] - x[j][1]) + (x[i][2] - x[j][2]) * (x[i][2] - x[j][2]));
 	xij = sqrt((x[i][0] - x[j][0]) * (x[i][0] - x[j][0]) + (x[i][1] - x[j][1]) * (x[i][1] - x[j][1]));
 	thita[0] = fabs(x[i][2] - x[j][2]) / rij;
-	if (xi >= 0)
-		fi[0] = asin(xj / xij);
-	else
-		fi[0] = asin(xj / xij) + PI / 2;
+	if (xij < 0.000001)
+		fi[0] = 0;
+	else{
+		if (xi >= 0){
+			if (xj >= 0)
+				fi[0] = asin(xj / xij);
+			else
+				fi[0] = asin(xj / xij) + 2 * PI;
+		}		
+		else    //  xi < 0 
+			fi[0] = PI - asin(xj / xij);		
+	}
+
 
 
 }

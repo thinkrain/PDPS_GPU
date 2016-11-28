@@ -35,6 +35,12 @@ public:
 	int comm_forward;                       // size of forward communication (0 if none)
 	int comm_reverse;                       // size of reverse communication (0 if none)
 
+	//	Parameters for GPU
+	int *devSetflag;
+	double *devCutsq;
+	int *hostSetflag;
+	double *hostCutsq;
+
 	class PairList *pair_list;
 
 	Pair(class PDPS*);
@@ -54,6 +60,7 @@ public:
 	void ev_tally(int, int, int, int, double, double, double,
                 double, double, double);
 	  
+
 protected:
 	int allocated;                // 0/1 = whether arrays are allocated
 	int procid;

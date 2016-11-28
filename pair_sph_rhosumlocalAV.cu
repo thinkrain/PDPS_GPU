@@ -24,12 +24,94 @@ See the README file in the top-level PDPS directory.
 #include "update.h"
 #include "group.h"
 
+#include "pdps_cuda.h"
+#include "cuda_engine.h"
+#include "device_launch_parameters.h"
+#include "device_functions.h"
 using namespace PDPS_NS;
-
 
 #define DELTA 1
 #define EPSILON 1.0e-10
 #define PI 3.1416
+
+__global__ void gpuComputerhoAV(double *devCoordX, double *devCoordY, double *devCoordZ, int *devPairtable, int *devNumneigh,
+					double *devRho, double *devVolume, double *devPoro, double *devMass, int *devType, int *devMask, const double h,
+					const int nlocal, const double a3D, const int lgroupbit, const int sgroupbit, int *devSetflag, double *devCutsq){
+	int i = blockIdx.x * blockDim.x + threadIdx.x;
+	double wf, xtemp, ytemp, ztemp, rsq, delx, dely, delz, q, imass, jmass;
+	int j, jj, itype, jtype, jnum;
+	__shared__ double mass[TYPEMAX];
+	__shared__ int setflag[TYPEMAX * TYPEMAX];
+	__shared__ double cutsq[TYPEMAX * TYPEMAX];
+	for (int tid = 0; tid < TYPEMAX; tid++){
+		mass[tid] = devMass[tid];
+		for (j = 0; j < TYPEMAX; j++){
+			setflag[tid * TYPEMAX + j] = devSetflag[tid * TYPEMAX + j];
+			cutsq[tid * TYPEMAX + j] = devCutsq[tid * TYPEMAX + j];
+		}
+			
+	}
+
+	for (i = i; i < nlocal; i += blockDim.x * gridDim.x){
+		itype = devType[i];
+		wf = a3D;
+		if (devMask[i] & lgroupbit){
+			imass = mass[itype];
+			devRho[i] = imass * wf;
+			devPoro[i] = 0.0;
+		}
+		else if (devMask[i] & sgroupbit)
+			devPoro[i] = devVolume[i] * wf;
+	}
+	__syncthreads();
+	for (i = blockIdx.x * blockDim.x + threadIdx.x; i < nlocal; i += blockDim.x * gridDim.x){
+		xtemp = devCoordX[i];
+		ytemp = devCoordY[i];
+		ztemp = devCoordZ[i];
+		jnum = devNumneigh[i];
+		for (jj = 0; jj < jnum; jj++){
+			j = devPairtable[i * NEIGHMAX + jj];
+			jtype = devType[j];
+			if (setflag[itype * TYPEMAX + jtype]){
+				delx = xtemp - devCoordX[j];
+				dely = ytemp - devCoordY[j];
+				delz = ztemp - devCoordZ[j];
+				rsq = delx * delx + dely * dely + delz * delz;
+				if (rsq < cutsq[itype * TYPEMAX + jtype]){
+					q = sqrt(rsq) / h;
+					//	Cubic Spline
+					if (q < 1)
+						wf = 1 - 1.5 * q * q + 0.75 * q * q * q;
+					else
+						wf = 0.25 * (2 - q) * (2 - q) * (2 - q);
+					wf = wf * a3D;
+					//  detect solid particle for local average
+					if (devMask[j] & sgroupbit){
+						devPoro[i] += devVolume[j] * wf;
+					}
+					else if (devMask[i] & sgroupbit){
+						devPoro[i] += devVolume[i] * wf;
+					}
+					else {
+						if (devMask[i] & lgroupbit){
+							devRho[i] += mass[jtype] * wf;
+						}
+					}
+
+				}		//  rsq < cutsq[itype][jtype]
+
+			}	// setflag[itype * 10 + jtype]
+		}	// j < jnum
+
+	}	// i < nlocal
+
+	if (i < nlocal){
+		if (devMask[i] & lgroupbit)
+			devRho[i] = devRho[i] / (1 - devPoro[i]);
+	}
+}
+
+
 /* ---------------------------------------------------------------------- */
 
 PairSPH_RHOSUMLOCALAV::PairSPH_RHOSUMLOCALAV(PDPS *ps) : Pair(ps)
@@ -45,6 +127,9 @@ PairSPH_RHOSUMLOCALAV::PairSPH_RHOSUMLOCALAV(PDPS *ps) : Pair(ps)
 	cut = NULL;
 	cutsq = NULL;
 	comm_forward = comm_reverse = 2;
+	devSetflag = NULL;
+	devCutsq = NULL;
+
 }
 
 /* ---------------------------------------------------------------------- */
@@ -76,7 +161,9 @@ void PairSPH_RHOSUMLOCALAV::allocate()
 	memory->create(rho0, n + 1, "pair:rho0");
 	memory->create(cut, n + 1, n + 1, "pair:cut");
 
-
+	// pointer to transfer to GPU
+	hostSetflag = (int *)malloc(TYPEMAX * TYPEMAX * sizeof(int));
+	hostCutsq = (double *)malloc(TYPEMAX * TYPEMAX * sizeof(double));
 }
 
 /* ----------------------------------------------------------------------
@@ -137,129 +224,136 @@ void PairSPH_RHOSUMLOCALAV::compute(int eflag, int vflag)
 
 	// loop over neighbors of my particles
 //	printf("before pair timestep = %d procid = %d rho[0] = %f\n", update->ntimestep, parallel->procid, rho[0]);
-	if ((update->ntimestep % nstep) == 0) {
+	//if ((update->ntimestep % nstep) == 0) {
 
-		// initialize density with self-contribution,
-		for (i = 0; i < nlocal; i++) {
-			itype = type[i];
-			if (domain->dim == 3) {
+	//	// initialize density with self-contribution,
+	//	for (i = 0; i < nlocal; i++) {
+	//		itype = type[i];
+	//		if (domain->dim == 3) {
 
-				// Cubic spline kernel, 3d
-				wf = a3D;
-			}
-			else {
-				// Cubic spline kernel, 2d
-				wf = a2D;
-			}
-			if (mask[i] & lgroupbit){
-				imass = mass[itype];
-				rho[i] = imass * wf;
-				poro[i] = 0.0;
-			}
-			else if (mask[i] & sgroupbit){
-				poro[i] = volume[i] *wf;
-			}
+	//			// Cubic spline kernel, 3d
+	//			wf = a3D;
+	//		}
+	//		else {
+	//			// Cubic spline kernel, 2d
+	//			wf = a2D;
+	//		}
+	//		if (mask[i] & lgroupbit){
+	//			imass = mass[itype];
+	//			rho[i] = imass * wf;
+	//			poro[i] = 0.0;
+	//		}
+	//		else if (mask[i] & sgroupbit){
+	//			poro[i] = volume[i] *wf;
+	//		}
 
-			
-		}
-		//	set all ghost particle's rho and porosity zero to be computed
-		if (particle->nghost > 0){
-			for (i = nlocal; i < nlocal + particle->nghost; i++){
-				itype = type[i];
-				if (mask[i] & lgroupbit){
-					rho[i] = 0.0;
-					poro[i] = 0.0;
-				}
-				if (mask[i] & sgroupbit){
-					poro[i] = 0.0;
-				}
-					
-			}
-		}
-		for (ii = 0; ii < inum; ii++) {
-			i = ilist[ii];
-			xtmp = x[i][0];
-			ytmp = x[i][1];
-			ztmp = x[i][2];
-			itype = type[i];
-			jlist = firstneigh[i];
-			jnum = numneigh[i];
+	//		
+	//	}
+	//	//	set all ghost particle's rho and porosity zero to be computed
+	//	if (particle->nghost > 0){
+	//		for (i = nlocal; i < nlocal + particle->nghost; i++){
+	//			itype = type[i];
+	//			if (mask[i] & lgroupbit){
+	//				rho[i] = 0.0;
+	//				poro[i] = 0.0;
+	//			}
+	//			if (mask[i] & sgroupbit){
+	//				poro[i] = 0.0;
+	//			}
+	//				
+	//		}
+	//	}
+	//	for (ii = 0; ii < inum; ii++) {
+	//		i = ilist[ii];
+	//		xtmp = x[i][0];
+	//		ytmp = x[i][1];
+	//		ztmp = x[i][2];
+	//		itype = type[i];
+	//		jlist = firstneigh[i];
+	//		jnum = numneigh[i];
 
-			for (jj = 0; jj < jnum; jj++) {
-				j = jlist[jj];
+	//		for (jj = 0; jj < jnum; jj++) {
+	//			j = jlist[jj];
 
-				jtype = type[j];
-				if (setflag[itype][jtype]){
-					delx = xtmp - x[j][0];
-					dely = ytmp - x[j][1];
-					delz = ztmp - x[j][2];
-					rsq = delx * delx + dely * dely + delz * delz;
+	//			jtype = type[j];
+	//			if (setflag[itype][jtype]){
+	//				delx = xtmp - x[j][0];
+	//				dely = ytmp - x[j][1];
+	//				delz = ztmp - x[j][2];
+	//				rsq = delx * delx + dely * dely + delz * delz;
 
-					if (rsq < cutsq[itype][jtype]) {
-						q = sqrt(rsq) / h;
+	//				if (rsq < cutsq[itype][jtype]) {
+	//					q = sqrt(rsq) / h;
 
-						if (cubic_flag == 1){
-							if (q < 1)
-								wf = 1 - 1.5 * q * q + 0.75 * q * q * q;
-							else
-								wf = 0.25 * (2 - q) * (2 - q) * (2 - q);
-						}
-						else if (quintic_flag == 1)
-							wf = (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (2 * q + 1);
+	//					if (cubic_flag == 1){
+	//						if (q < 1)
+	//							wf = 1 - 1.5 * q * q + 0.75 * q * q * q;
+	//						else
+	//							wf = 0.25 * (2 - q) * (2 - q) * (2 - q);
+	//					}
+	//					else if (quintic_flag == 1)
+	//						wf = (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (1 - q / 2.0) * (2 * q + 1);
 
-						if (domain->dim == 3)
-							wf = wf * a3D;
-						else
-							wf = wf * a2D;
+	//					if (domain->dim == 3)
+	//						wf = wf * a3D;
+	//					else
+	//						wf = wf * a2D;
 
-						//  detect solid particle for local average
-						if (mask[i] & sgroupbit && mask[j] & lgroupbit){
-							poro[i] += volume[i] * wf;
-							poro[j] += volume[i] * wf;
-							if (inclusion_flag == 1)
-								rho[j] += rho0[jtype] * volume[i] * wf;
+	//					//  detect solid particle for local average
+	//					if (mask[i] & sgroupbit && mask[j] & lgroupbit){
+	//						poro[i] += volume[i] * wf;
+	//						poro[j] += volume[i] * wf;
+	//						if (inclusion_flag == 1)
+	//							rho[j] += rho0[jtype] * volume[i] * wf;
 
-						}
-						else if (mask[j] & sgroupbit && mask[i] & lgroupbit){
-							poro[j] += volume[j] * wf;
-							poro[i] += volume[j] * wf;
-							if (inclusion_flag == 1)
-								rho[i] += rho0[itype] * volume[j] * wf;
-						}
-						else if (mask[j] & sgroupbit && mask[i] & sgroupbit){
-							poro[j] += volume[i] * wf;
-							poro[i] += volume[j] * wf;
-						}
-						else {
-							if (mask[i] & lgroupbit){
-								rho[i] += mass[jtype] * wf;
-							}
+	//					}
+	//					else if (mask[j] & sgroupbit && mask[i] & lgroupbit){
+	//						poro[j] += volume[j] * wf;
+	//						poro[i] += volume[j] * wf;
+	//						if (inclusion_flag == 1)
+	//							rho[i] += rho0[itype] * volume[j] * wf;
+	//					}
+	//					else if (mask[j] & sgroupbit && mask[i] & sgroupbit){
+	//						poro[j] += volume[i] * wf;
+	//						poro[i] += volume[j] * wf;
+	//					}
+	//					else {
+	//						if (mask[i] & lgroupbit){
+	//							rho[i] += mass[jtype] * wf;
+	//						}
 
-							if (mask[j] & lgroupbit){
-								rho[j] += mass[itype] * wf;
-							}
-						}
+	//						if (mask[j] & lgroupbit){
+	//							rho[j] += mass[itype] * wf;
+	//						}
+	//					}
 
-					}
+	//				}
 
-				}
+	//			}
 
-			}
+	//		}
 
-		}
-	
-		parallel->reverse_comm_pair(this); 
-		if (poro_flag == 1){
-			for (i = 0; i < nlocal; i++){
-				itype = type[i];
-				if (mask[i] & lgroupbit)
-					rho[i] = rho[i] / (1 - poro[i]);
-			}
-		}
-		parallel->forward_comm_pair(this);
+	//	}
+	//
+	//	parallel->reverse_comm_pair(this); 
+	//	if (poro_flag == 1){
+	//		for (i = 0; i < nlocal; i++){
+	//			itype = type[i];
+	//			if (mask[i] & lgroupbit)
+	//				rho[i] = rho[i] / (1 - poro[i]);
+	//		}
+	//	}
+	//	parallel->forward_comm_pair(this);
 
 
-	}
+	//}
+	cudaError_t error_t;
+	gpuComputerhoAV << < GRID_SIZE, BLOCK_SIZE >> >(particle->devCoordX, particle->devCoordY, particle->devCoordZ,
+		neighbor->devPairtable, neighbor->devNumneigh, particle->devRho, particle->devVolume, particle->devPoro, particle->devMass, 
+		particle->devType, particle->devMask, h, nlocal, a3D, lgroupbit, sgroupbit, devSetflag, devCutsq);
+	error_t = cudaMemcpy(hostSetflag, devSetflag, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	error_t = cudaMemcpy(hostCutsq, devCutsq, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	error_t = cudaMemcpy(particle->ptrHostRho, particle->devRho, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
 
 }
 
@@ -316,6 +410,7 @@ void PairSPH_RHOSUMLOCALAV::set_coeff(int narg, char **arg)
 		allocate();
 
 	int ilo, ihi, jlo, jhi;
+
 	force->bounds(arg[0], particle->ntypes, ilo, ihi);
 	force->bounds(arg[1], particle->ntypes, jlo, jhi);
 
@@ -331,6 +426,8 @@ void PairSPH_RHOSUMLOCALAV::set_coeff(int narg, char **arg)
 			cutsq[i][j] = cut[i][j] * cut[i][j];
 			setflag[i][j] = 1;
 			count++;
+			hostSetflag[i * TYPEMAX + j] = setflag[i][j];
+			hostCutsq[i * TYPEMAX + j] = cutsq[i][j];
 		}
 	}
 
@@ -347,6 +444,13 @@ void PairSPH_RHOSUMLOCALAV::set_coeff(int narg, char **arg)
 
 	if (count == 0)
 		error->all(FLERR, "Incorrect args for pair coefficients");
+
+	// setup for GPU parameters
+	cudaError_t cudaStatus;
+	cudaMalloc(&devSetflag, TYPEMAX * TYPEMAX * sizeof(int));
+	cudaMalloc(&devCutsq, TYPEMAX * TYPEMAX * sizeof(double));
+	cudaMemcpy(devSetflag, hostSetflag, TYPEMAX * TYPEMAX * sizeof(int), cudaMemcpyHostToDevice);
+	cudaStatus = cudaMemcpy(devCutsq, hostCutsq, TYPEMAX * TYPEMAX * sizeof(double), cudaMemcpyHostToDevice);
 }
 
 /* ----------------------------------------------------------------------

@@ -7,6 +7,7 @@
    See the README file in the top-level PDPS directory.
 ------------------------------------------------------------------------- */
 
+
 #include "math.h"
 #include "stdlib.h"
 #include "string.h"
@@ -22,6 +23,11 @@
 #include "pair.h"
 #include "update.h"
 
+#include "pdps_cuda.h"
+#include "cuda_engine.h"
+#include "device_launch_parameters.h"
+#include "device_functions.h"
+
 using namespace PDPS_NS;
 
 #define RQDELTA 1
@@ -35,11 +41,199 @@ using namespace PDPS_NS;
 #define BIG 1.0e20
 #define CUT2BIN_RATIO 100
 
+
 enum{SINGLE,MULTI};     // also in neigh_list.cpp
 
 //#define NEIGH_LIST_DEBUG 1
 
 /* ---------------------------------------------------------------------- */
+__global__ void gpulinklist(int *devLinked_list, int *devHead, int *devSubclo, int *devSubnc,
+	double *devBoxhi, double *devBoxlo, double *devCle, int *devNc, const int nall,
+	const int subncxyz, const int subncxy, double *devCoordX, double *devCoordY, double *devCoordZ){
+
+
+	// Reset the headers to -1
+	for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < subncxyz; i+=blockDim.x * gridDim.x) 
+		devHead[i] = -1;
+	__syncthreads();
+
+	__shared__ double boxhi[3];
+	__shared__ double boxlo[3];
+	__shared__ double cle[3];
+	__shared__ int nc[3];
+	__shared__ int subclo[3];
+	__shared__ int subnc[3];
+	for (int dim = 0; dim < 3; dim++){
+		boxhi[dim] = devBoxhi[dim];
+		boxlo[dim] = devBoxlo[dim];
+		cle[dim] = devCle[dim];
+		nc[dim] = devNc[dim];
+		subclo[dim] = devSubclo[dim];
+		subnc[dim] = devSubnc[dim];
+	}
+	__syncthreads();
+	// Scan particles to construct headers, head, & linked lists, linked_list
+	// Scan ghost particles first, so they will appear at the end of the neighbor list
+	// Scan in an reverse order, so they will apear in a correct order in the neighbor list 
+
+	for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < subncxyz; i += blockDim.x * gridDim.x){
+		for (int pid = 0; pid <  nall; pid++){
+			if (pid >= nall)
+				break;
+			int ic[3];
+			for (int dim = 0; dim < 3; dim++) {
+				if (devCoordX[pid] >= boxhi[dim])
+					ic[dim] = static_cast<int> ((devCoordX[pid] - boxhi[dim]) / cle[dim]) + nc[dim];
+				else if (devCoordX[pid] >= boxlo[dim]) {
+					ic[dim] = static_cast<int> ((devCoordX[pid] - boxlo[dim]) / cle[dim]);
+					ic[dim] = MIN(ic[dim], nc[dim] - 1);
+				}
+				else
+					ic[dim] = static_cast<int> ((devCoordX[pid] - boxlo[dim]) / cle[dim]) - 1;
+			}
+
+			for (int dim = 0; dim < 3; dim++)
+				ic[dim] -= subclo[dim];
+
+			int c = ic[2] * subncxy + ic[1] * subnc[0] + ic[0];
+
+			if (c == i){
+				// Link to the previoius occupant (or -1 if you are the 1st)
+				devLinked_list[pid] = devHead[c];
+				// The last one goes to the header
+				devHead[c] = pid;
+			}
+
+		}
+	}
+	
+
+
+}
+ 
+//	build the whole neighbor list, not half
+__global__  void gpuneighbuild(int *devLinked_list, int *devHead, int *devNumneigh, int *devPairtable, int *devCoffsets, const int devNoffsets, 
+	int *devSubclo, int *devSubnc, double *devBoxhi, double *devBoxlo, double *devCle, int *devNc, double *devRneighsq, 
+	const int nlocal, const int subncxyz, const int subncxy, double *devCoordX, double *devCoordY, double *devCoordZ, int *devType){
+
+	int i = blockIdx.x * blockDim.x + threadIdx.x;
+	int ic[3];
+	int c1, j, itype, jtype, dim;
+	double rijsq, dx, dy, dz;
+
+	__shared__ double boxhi[3];
+	__shared__ double boxlo[3];
+	__shared__ double cle[3];
+	__shared__ int nc[3];
+	__shared__ int subclo[3];
+	__shared__ int subnc[3];
+	__shared__ double rneighsq[TYPEMAX * TYPEMAX];
+	for (dim = 0; dim < 3; dim++){
+		boxhi[dim] = devBoxhi[dim];
+		boxlo[dim] = devBoxlo[dim];
+		cle[dim] = devCle[dim];
+		nc[dim] = devNc[dim];
+		subclo[dim] = devSubclo[dim];
+		subnc[dim] = devSubnc[dim];
+	}
+	for (itype = 0; itype < TYPEMAX; itype++){
+		for (jtype = 0; jtype < TYPEMAX; jtype++)
+			rneighsq[itype * TYPEMAX + jtype] = devRneighsq[itype * TYPEMAX + jtype];
+	}
+	__syncthreads();
+
+	if (i < nlocal){
+
+		int numneigh = 0;
+		itype = devType[i];
+		double xi = devCoordX[i];
+		double yi = devCoordY[i];
+		double zi = devCoordZ[i];
+		dim = 0;
+		//	X dimension
+		if (xi >= boxhi[dim])
+			ic[dim] = static_cast<int> ((xi - boxhi[dim]) / cle[dim]) + nc[dim];
+		else if (xi >= boxlo[dim]) {
+			ic[dim] = static_cast<int> ((xi - boxlo[dim]) / cle[dim]);
+			ic[dim] = MIN(ic[dim], nc[dim] - 1);
+		}
+		else
+			ic[dim] = static_cast<int> ((xi - boxlo[dim]) / cle[dim]) - 1;
+		//  Y dimension
+		dim = 1;
+		if (yi >= boxhi[dim])
+			ic[dim] = static_cast<int> ((yi - boxhi[dim]) / cle[dim]) + nc[dim];
+		else if (yi >= boxlo[dim]) {
+			ic[dim] = static_cast<int> ((yi - boxlo[dim]) / cle[dim]);
+			ic[dim] = MIN(ic[dim], nc[dim] - 1);
+		}
+		else
+			ic[dim] = static_cast<int> ((yi - boxlo[dim]) / cle[dim]) - 1;
+		//  Z dimension
+		dim = 2;
+		if (zi >= boxhi[dim])
+			ic[dim] = static_cast<int> ((zi - boxhi[dim]) / cle[dim]) + nc[dim];
+		else if (zi >= boxlo[dim]) {
+			ic[dim] = static_cast<int> ((zi - boxlo[dim]) / cle[dim]);
+			ic[dim] = MIN(ic[dim], nc[dim] - 1);
+		}
+		else
+			ic[dim] = static_cast<int> ((zi - boxlo[dim]) / cle[dim]) - 1;
+
+		for (dim = 0; dim < 3; dim++)
+			ic[dim] -= subclo[dim];
+
+		int c = (ic[2] + 2) * subncxy + (ic[1] + 2) * subnc[0] + ic[0] + 2;
+
+		//	search neighbor particles through cells, in both direction
+		for (int direction = 0; direction < 2; direction++){
+			for (int io = 0; io < devNoffsets; io++){
+				if (direction == 0)
+					c1 = c + devCoffsets[io];
+				else
+					c1 = c - devCoffsets[io];
+				if (c == c1 && direction == 1) {
+					continue;
+				}
+				else j = devHead[c1];
+
+				while (j != -1){
+					jtype = devType[j];
+					// scan rest of particles in this cell c1
+					if (c == c1) {
+						// skip itself
+						if (j == i){
+							j = devLinked_list[j];
+							continue;
+						}
+					}
+
+					rijsq = 0.0;
+					dx = xi - devCoordX[j];
+					dy = yi - devCoordY[j];
+					dz = zi - devCoordZ[j];
+					rijsq += dx * dx;
+					rijsq += dy * dy;
+					rijsq += dz * dz;
+
+					if (rijsq < rneighsq[itype * TYPEMAX + jtype]){
+						devPairtable[i * NEIGHMAX + numneigh] = j;
+						numneigh += 1;
+					}
+
+					j = devLinked_list[j];
+				}	// j != -1
+
+			}	// io < noffsets
+		}	// direction < 2
+		
+		devNumneigh[i] = numneigh;
+
+
+	}	// i < nlocal
+
+
+}
 
 Neighbor::Neighbor(PDPS *ps) : Pointers(ps)
 {
@@ -81,6 +275,21 @@ Neighbor::Neighbor(PDPS *ps) : Pointers(ps)
 
 	neighlist = NULL;
 	neighlist = new NeighList(ps,pgsize);
+
+	devCoffsets = NULL;
+	devLinked_list = NULL;
+	devHead = NULL;
+	devBoxle = NULL;
+	devCle = NULL;
+	devNc = NULL;
+
+	devSubclo = NULL;
+	devSubnc = NULL;
+	devBoxhi = NULL;
+	devBoxlo = NULL;
+
+	devPairtable = NULL;
+	devNumneigh = NULL;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -213,6 +422,15 @@ void Neighbor::init()
 		pair_build = &Neighbor::half_multi;
 		offsets_create = &Neighbor::offsets_half_multi;
 	}
+
+	double *hostRneighsq;
+	hostRneighsq = (double *)malloc(TYPEMAX * TYPEMAX * sizeof(double));
+	for (i = 1; i < n; i++){
+		for (j = 1; j < n; j++)
+			hostRneighsq[i * TYPEMAX + j] = rneighsq[i][j];
+	}
+	cudaMalloc(&devRneighsq, TYPEMAX * TYPEMAX * sizeof(double));
+	cudaMemcpy(devRneighsq, hostRneighsq, TYPEMAX * TYPEMAX * sizeof(double), cudaMemcpyHostToDevice);
 }
 
 /* ---------------------------------------------------------------------- 
@@ -280,7 +498,6 @@ void Neighbor::setup_cells()
 	// ghost_sub lo/hi = bounding box of the local domain extended by parallel->rcghost
 	
 	double *rcghost = parallel->rcghost;
-
 	// extend subdomain by rcghost
 	ghost_sublo[0] = sublo[0] - rcghost[0];
 	ghost_sublo[1] = sublo[1] - rcghost[1];
@@ -295,7 +512,7 @@ void Neighbor::setup_cells()
 		rcell = 0.5 * rcut_max;         // default cell length is half of the maximum pair cut-off
 	}
 	else if (style == MULTI) {
-		rcell = 0.5 * rcut_min; 
+		rcell = 0.5 * rcut_min;
 	}
 	
 	// create cells in the global domain
@@ -337,14 +554,14 @@ void Neighbor::setup_cells()
 	// extend cell by 1 to insure cell offsets can cover all possible interactive cells
 	// if 2d, only 1 cell in z
 
-	subclo[0] -= 1;
-	subchi[0] += 1;
-	subclo[1] -= 1;
-	subchi[1] += 1;
+	subclo[0] -= 2;
+	subchi[0] += 2;
+	subclo[1] -= 2;
+	subchi[1] += 2;
 
 	if (dim == 3) {
-		subclo[2] -= 1;
-		subchi[2] += 1;
+		subclo[2] -= 2;
+		subchi[2] += 2;
 	}
 
 	for (int i = 0; i < 3; i++) {
@@ -362,6 +579,42 @@ void Neighbor::setup_cells()
 	}
 
 	(this->*offsets_create)();
+	//	Transfer the data to GPU
+	cudaMalloc(&devCoffsets, noffsets * sizeof(int));
+	cudaMalloc(&devBoxle, 3 * sizeof(double));
+	cudaMalloc(&devCle, 3 * sizeof(double));
+	cudaMalloc(&devNc, 3 * sizeof(int));
+	cudaMemcpy(devCoffsets, coffsets, noffsets * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(devBoxle, boxle, 3 * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(devCle, cle, 3 * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(devNc, nc, 3 * sizeof(int), cudaMemcpyHostToDevice);
+
+	cudaMalloc(&devSubclo, 3 * sizeof(int));
+	cudaMalloc(&devSubnc, 3 * sizeof(int));
+	cudaMalloc(&devBoxhi, 3 * sizeof(double));
+	cudaMalloc(&devBoxlo, 3 * sizeof(double));
+	cudaMemcpy(devSubclo, subclo, 3 * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(devSubnc, subnc, 3 * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(devBoxhi, boxhi, 3 * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(devBoxlo, boxlo, 3 * sizeof(double), cudaMemcpyHostToDevice);
+
+	cudaMalloc(&devLinked_list, (particle->nlocal + particle->nghost) * sizeof(int));
+	cudaMalloc(&devHead, subncxyz * sizeof(int));
+	cudaMalloc(&devNumneigh, particle->nlocal * sizeof(int));
+	cudaMalloc(&devPairtable, particle->nlocal * NEIGHMAX * sizeof(int));
+
+	hostPairtable = (int *)malloc(particle->nlocal * NEIGHMAX * sizeof(int));
+	hostNumneigh = (int *)malloc(particle->nlocal * sizeof(int));
+	hostCoordX = (double *)malloc((particle->nlocal + particle->nghost) * sizeof(double));
+	hostCoordY = (double *)malloc((particle->nlocal + particle->nghost) * sizeof(double));
+	hostCoordZ = (double *)malloc((particle->nlocal + particle->nghost) * sizeof(double));
+	hostForceX = (double *)malloc((particle->nlocal + particle->nghost) * sizeof(double));
+	hostForceY = (double *)malloc((particle->nlocal + particle->nghost) * sizeof(double));
+	hostForceZ = (double *)malloc((particle->nlocal + particle->nghost) * sizeof(double));
+	hostVeloX = (double *)malloc((particle->nlocal + particle->nghost) * sizeof(double));
+	hostVeloY = (double *)malloc((particle->nlocal + particle->nghost) * sizeof(double));
+	hostVeloZ = (double *)malloc((particle->nlocal + particle->nghost) * sizeof(double));
+
 }
 
 /* ----------------------------------------------------------------------
@@ -393,6 +646,10 @@ double Neighbor::cell_distance(int i, int j, int k)
 
 void Neighbor::build()
 {
+
+	cudaError_t error_t;
+	error_t = cudaMemcpy(hostPairtable, devPairtable, particle->nlocal * 500 * sizeof(int), cudaMemcpyDeviceToHost);
+
 	ago = 0;
 	nbuilds++;
 	nbuilds_total++;
@@ -421,9 +678,7 @@ void Neighbor::build()
 	}
 	
 	build_before = 1;
-
 	create_linked_list();
-	
     create_neigh_list();
 }
 
@@ -460,11 +715,12 @@ void Neighbor::allocate(int nmax)
 void Neighbor::create_linked_list()
 {
 	int c;
-	int mc[3];
-
+	double *devCoordX = particle->devCoordX;
+	double *devCoordY = particle->devCoordY;
+	double *devCoordZ = particle->devCoordZ;
 	double **x = particle->x;
 	int nall = particle->nlocal + particle->nghost;
-	
+
 	// Reset the headers to -1
 	for (c = 0; c < subncxyz; c++) {
 		head[c] = -1;
@@ -485,6 +741,13 @@ void Neighbor::create_linked_list()
 		// The last one goes to the header
 		head[c] = i;
 	}
+	cudaError_t error_t;
+	error_t = cudaMemcpy(devLinked_list, linked_list, (particle->nlocal + particle->nghost) * sizeof(int), cudaMemcpyHostToDevice);
+	error_t = cudaMemcpy(devHead, head, subncxyz * sizeof(int), cudaMemcpyHostToDevice);
+
+	/*gpulinklist << < int(nall + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE >> > (devLinked_list, devHead, devSubclo, devSubnc,
+		devBoxhi, devBoxlo, devCle, devNc, nall, subncxyz, subncxy, devCoordX, devCoordY, devCoordZ);*/
+
 }
 
 /* ----------------------------------------------------------------------
@@ -520,7 +783,7 @@ int Neighbor::coord2cell(double *x)
 		ic[i] -= subclo[i];
 	}
 
-	int c = ic[2]*subncxy + ic[1]*subnc[0] + ic[0];
+	int c = (ic[2] + 2)*subncxy + (ic[1] + 2) * subnc[0] + ic[0] + 2;
 	return c;
 }
 
@@ -564,7 +827,23 @@ int Neighbor::coord2cell(double *x, int &icx, int &icy, int &icz)
 
 void Neighbor::create_neigh_list()
 {
+	
+	cudaError_t  error_t;
+	
+
+	int nall = particle->nlocal + particle->nghost;
 	(this->*pair_build)(neighlist);
+	//particle->TransferC2G();
+	//error_t = cudaMemcpy(hostCoordX, particle->devCoordX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(hostCoordY, particle->devCoordY, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(hostCoordZ, particle->devCoordZ, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	gpuneighbuild << < (nall + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE >> >(devLinked_list, devHead, devNumneigh, devPairtable, devCoffsets, noffsets,
+		devSubclo, devSubnc, devBoxhi, devBoxlo, devCle, devNc, devRneighsq,
+		particle->nlocal, subncxyz, subncxy, particle->devCoordX, particle->devCoordY, particle->devCoordZ, particle->devType);
+	error_t = cudaMemcpy(hostNumneigh, devNumneigh, particle->nlocal * sizeof(int), cudaMemcpyDeviceToHost);
+	error_t = cudaMemcpy(hostPairtable, devPairtable, particle->nlocal * NEIGHMAX * sizeof(int), cudaMemcpyDeviceToHost);
+	
+	
 }
 
 /* ---------------------------------------------------------------------- 

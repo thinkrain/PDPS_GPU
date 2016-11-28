@@ -16,6 +16,7 @@
 #include "error.h"
 #include "fix_addforce.h"
 #include "force.h"
+#include "group.h"
 #include "memory.h"
 #include "pair.h"
 #include "particle.h"
@@ -81,21 +82,23 @@ FixAddForce::FixAddForce(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 	}
 	else if (!strcmp(arg[3], "drag/felice")) {
 		force_style = DRAG_FELICE;
-		mu = atof(arg[4]);
-		rho_ref = atof(arg[5]);
-		voi_ref = atof(arg[6]);
-		if (!strcmp(arg[7], "voiset")){
+		lgid = group->find_group(arg[4]);
+		lgroupbit = group->bitmask[lgid];
+		mu = atof(arg[5]);
+		rho_ref = atof(arg[6]);
+		voi_ref = atof(arg[7]);
+		if (!strcmp(arg[8], "voiset")){
 			voiset_flag = 1;
-			voiset = atof(arg[8]);
-			if (strcmp(arg[9], "coupled") == 0){
+			voiset = atof(arg[9]);
+			if (strcmp(arg[10], "coupled") == 0){
 				coupled = 1;
 			}
 		}
-		else if (!strcmp(arg[7], "voiporo")){
+		else if (!strcmp(arg[8], "voiporo")){
 			voiset_flag = 0;
-			if (strcmp(arg[8], "coupled") == 0){
+			if (strcmp(arg[9], "coupled") == 0){
 				coupled = 1;
-				h = atof(arg[9]);
+				h = atof(arg[10]);
 			}
 		}
 		else
@@ -471,119 +474,118 @@ void FixAddForce::add_drag_felice()
 				wfsum = 0.0;
 				for (jj = 0; jj < jnum; jj++) {
 					j = jlist[jj];
-					if (mask[i] == mask[j])
-						continue;
-					jtype = type[j];
-					delx = xtmp - x[j][0];
-					dely = ytmp - x[j][1];
-					delz = ztmp - x[j][2];
-					rsq = delx * delx + dely * dely + delz * delz;
-					//h = force->pair[pair_id]->cut[itype][itype];
-					//h = radius[i] / 2.0;
-					if (rsq < 4 * h * h) {
+					if (mask[j] & lgroupbit){
+						jtype = type[j];
+						delx = xtmp - x[j][0];
+						dely = ytmp - x[j][1];
+						delz = ztmp - x[j][2];
+						rsq = delx * delx + dely * dely + delz * delz;
+						//h = force->pair[pair_id]->cut[itype][itype];
+						//h = radius[i] / 2.0;
+						if (rsq < 4 * h * h) {
 
-						q = sqrt(rsq) / h;
+							q = sqrt(rsq) / h;
 
-						if (q < 1)
-							wf = 1 - 1.5 * q * q + 0.75 * q * q * q;
-						else
-							wf = 0.25 * (2 - q) * (2 - q) * (2 - q);
-						if (domain->dim == 3)
-							wf = wf * 1.0 / PI / h / h / h;
-						else
-							wf = wf * 10.0 / 7.0 / PI / h / h;
+							if (q < 1)
+								wf = 1 - 1.5 * q * q + 0.75 * q * q * q;
+							else
+								wf = 0.25 * (2 - q) * (2 - q) * (2 - q);
+							if (domain->dim == 3)
+								wf = wf * 1.0 / PI / h / h / h;
+							else
+								wf = wf * 10.0 / 7.0 / PI / h / h;
 
-						v_ref[0] += v[j][0] * wf;
-						v_ref[1] += v[j][1] * wf;
-						v_ref[2] += v[j][2] * wf;
-						wfsum += wf;
+							v_ref[0] += v[j][0] * wf;
+							v_ref[1] += v[j][1] * wf;
+							v_ref[2] += v[j][2] * wf;
+							wfsum += wf;
 
+						}
 					}
-
 				}
 				if (wfsum > EPSILON){
 					v_ref[0] = v_ref[0] / wfsum;
 					v_ref[1] = v_ref[1] / wfsum;
 					v_ref[2] = v_ref[2] / wfsum;
-				}
 
-				for (j = 0; j < 3; j++) v_f[j] = v[i][j] - v_ref[j];// -v_coords[0][j];
-				vel_f = (v_f[0] * v_f[0] + v_f[1] * v_f[1] + v_f[2] * v_f[2]);
-				vel_f = sqrt(vel_f);
-//				inside_flag = domain->regions[rid]->inside(x[i]);
-		//		if (inside_flag == 0) {
-	//				continue;
-	//			}
-				//	cid = static_cast<int> ((x[i][2]-coords[0][2]) / cle[2]);
-				//	if (cid == cell[2]) cid--;
-				//	if (cid < 0 || cid > cell[2]) {
-				//		error->warning(FLERR, "Check code: compute_voidage()");
-				//	}
-				Re = rho_ref * vel_f * 2 * radius[i] / mu;
-				if (Re > EPSILON) {
-					if (Re < 0.5) Cd = 24 / Re;
-					else {
-						Cd = (0.63 + 4.8 / sqrt(Re));
-						Cd = Cd * Cd;
-					}
-					//voi = 0.8;
-					//voi = rho[i] / rho_ref;
-					voi = 1 - poro[i];
-					if (voiset_flag == 1)
-						voi = voiset;
-					xi = 3.7 - 0.65*exp(-(1.5 - log10(Re))*(1.5 - log10(Re)) / 2);
-					// Fd = 0.5 * rho_ref * vel_relative^2 * Cd * pi * R^2
-					radius_sq = radius[i] * radius[i];
-					if (voi > voi_ref){
-						coeff = 0.5 * rho_ref * PI * radius_sq * pow(voi, -xi);
-						f[i][0] += (-coeff * Cd * v_f[0] * vel_f);
-						f[i][1] += (-coeff * Cd * v_f[1] * vel_f);
-						f[i][2] += (-coeff * Cd * v_f[2] * vel_f);
+					for (j = 0; j < 3; j++) v_f[j] = v[i][j] - v_ref[j];// -v_coords[0][j];
+					vel_f = (v_f[0] * v_f[0] + v_f[1] * v_f[1] + v_f[2] * v_f[2]);
+					vel_f = sqrt(vel_f);
+					//				inside_flag = domain->regions[rid]->inside(x[i]);
+					//		if (inside_flag == 0) {
+					//				continue;
+					//			}
+					//	cid = static_cast<int> ((x[i][2]-coords[0][2]) / cle[2]);
+					//	if (cid == cell[2]) cid--;
+					//	if (cid < 0 || cid > cell[2]) {
+					//		error->warning(FLERR, "Check code: compute_voidage()");
+					//	}
+					Re = rho_ref * vel_f * 2 * radius[i] / mu;
+					if (Re > EPSILON) {
+						if (Re < 0.5) Cd = 24 / Re;
+						else {
+							Cd = (0.63 + 4.8 / sqrt(Re));
+							Cd = Cd * Cd;
+						}
+						//voi = 0.8;
+						//voi = rho[i] / rho_ref;
+						voi = 1 - poro[i];
+						if (voiset_flag == 1)
+							voi = voiset;
+						xi = 3.7 - 0.65*exp(-(1.5 - log10(Re))*(1.5 - log10(Re)) / 2);
+						// Fd = 0.5 * rho_ref * vel_relative^2 * Cd * pi * R^2
+						radius_sq = radius[i] * radius[i];
+						if (voi > voi_ref){
+							coeff = 0.5 * rho_ref * PI * radius_sq * pow(voi, -xi);
+							f[i][0] += (-coeff * Cd * v_f[0] * vel_f);
+							f[i][1] += (-coeff * Cd * v_f[1] * vel_f);
+							f[i][2] += (-coeff * Cd * v_f[2] * vel_f);
 
-						for (jj = 0; jj < jnum; jj++) {
-							j = jlist[jj];
-							if (mask[i] == mask[j])
-								continue;
-							jtype = type[j];
-							delx = xtmp - x[j][0];
-							dely = ytmp - x[j][1];
-							delz = ztmp - x[j][2];
-							rsq = delx * delx + dely * dely + delz * delz;
-							//h = force->pair[pair_id]->cut[itype][itype];
-							//h = radius[i] / 2.0;
-							if (rsq < 4 * h * h) {
+							for (jj = 0; jj < jnum; jj++) {
+								j = jlist[jj];
+								if (mask[j] & lgroupbit){
+									jtype = type[j];
+									delx = xtmp - x[j][0];
+									dely = ytmp - x[j][1];
+									delz = ztmp - x[j][2];
+									rsq = delx * delx + dely * dely + delz * delz;
+									//h = force->pair[pair_id]->cut[itype][itype];
+									//h = radius[i] / 2.0;
+									if (rsq < 4 * h * h) {
 
-								q = sqrt(rsq) / h;
+										q = sqrt(rsq) / h;
 
-								if (q < 1)
-									wf = 1 - 1.5 * q * q + 0.75 * q * q * q;
-								else
-									wf = 0.25 * (2 - q) * (2 - q) * (2 - q);
-								if (domain->dim == 3)
-									wf = wf * 1.0 / PI / h / h / h;
-								else
-									wf = wf * 10.0 / 7.0 / PI / h / h;
+										if (q < 1)
+											wf = 1 - 1.5 * q * q + 0.75 * q * q * q;
+										else
+											wf = 0.25 * (2 - q) * (2 - q) * (2 - q);
+										if (domain->dim == 3)
+											wf = wf * 1.0 / PI / h / h / h;
+										else
+											wf = wf * 10.0 / 7.0 / PI / h / h;
 
-								f[j][0] -= (-coeff * Cd * v_f[0] * vel_f)  * wf / wfsum;
-								f[j][1] -= (-coeff * Cd * v_f[1] * vel_f)  * wf / wfsum;
-								f[j][2] -= (-coeff * Cd * v_f[2] * vel_f)  * wf / wfsum;
+										f[j][0] -= (-coeff * Cd * v_f[0] * vel_f)  * wf / wfsum;
+										f[j][1] -= (-coeff * Cd * v_f[1] * vel_f)  * wf / wfsum;
+										f[j][2] -= (-coeff * Cd * v_f[2] * vel_f)  * wf / wfsum;
+
+									}
+								}
+
 
 							}
-
 						}
-					}
 
 
 
-				}
+					}	// Re number
+
+				}	//  if there is sph particle inside the cutoff distance
+
+			}	// groupbit
+		}	//	nlocal
 
 
-
-			}
-		}
-
-
-	}
+	}	// coupled == 1
 	
 }
 

@@ -50,7 +50,7 @@ public:
 	double voi, voi_ref, voiset;
 	int voiset_flag;
 	int rid;
-
+	int sgid, sgroupbit, lgid, lgroupbit;					//	group bit for liquid particles and solid particles
 	void add_drag_stokes();
 	void add_drag_general();
 	void add_drag_felice();

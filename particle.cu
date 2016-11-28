@@ -11,7 +11,7 @@
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
-
+#include "neighbor.h"
 #include "create_particle.h"
 #include "domain.h"
 #include "error.h"
@@ -24,15 +24,86 @@
 #include "random_park.h"
 #include "style_particle.h"
 
+#include "pdps_cuda.h"
+#include "cuda_engine.h"
+#include "device_launch_parameters.h"
+#include "device_functions.h"
 using namespace PDPS_NS;
 using namespace PhyConst;
 
 #define DELTA 10000
 #define EPSILON 1.0e-6
 
+
+
+__global__ void gputest(double *devCoordX){
+	int pid = blockIdx.x * blockDim.x + threadIdx.x;
+		devCoordX[pid] = -1;
+}
+//	convert from Aos to SoA
+__global__ void gpuInterLeave(double *ArrayRaw, double *ArrayX, double *ArrayY, double * ArrayZ, const int nlocal){
+	extern __shared__ double buf[];
+	int pid = blockIdx.x * blockDim.x + threadIdx.x;
+	if (pid < nlocal){
+		buf[threadIdx.x * 3 + 0] = ArrayX[pid];
+		buf[threadIdx.x * 3 + 1] = ArrayY[pid];
+		buf[threadIdx.x * 3 + 2] = ArrayZ[pid];
+	}
+	__syncthreads();
+	int g = blockIdx.x * blockDim.x * 3;
+	int p = threadIdx.x;
+	if (g + p < nlocal * 3)
+		ArrayRaw[g + p] = buf[p];
+	p += blockDim.x;
+	if (g + p < nlocal * 3)
+		ArrayRaw[g + p] = buf[p];
+	p += blockDim.x;
+	if (g + p < nlocal * 3)
+		ArrayRaw[g + p] = buf[p];
+
+}
+
+//	convert from SoA to Aos
+__global__ void gpuDeinterLeave(double *ArrayRaw, double *ArrayX, double *ArrayY, double * ArrayZ, const int nlocal){
+	extern __shared__ double buf[];
+
+	int g = blockIdx.x * blockDim.x * 3;
+	int p = threadIdx.x;
+	if (g + p < nlocal * 3)
+		buf[p] = ArrayRaw[g + p];
+	p += blockDim.x;
+	if (g + p < nlocal * 3)
+		buf[p] = ArrayRaw[g + p];
+	p += blockDim.x;
+	if (g + p < nlocal * 3)
+		buf[p] = ArrayRaw[g + p];
+	__syncthreads();
+
+	int pid = blockIdx.x * blockDim.x + threadIdx.x;
+	if (pid < nlocal){
+		ArrayX[pid] = buf[threadIdx.x * 3 + 0];
+		ArrayY[pid] = buf[threadIdx.x * 3 + 1];
+		ArrayZ[pid] = buf[threadIdx.x * 3 + 2];
+	}
+
+
+
+}
+
+// copy data between device
+template<class TYPE> __global__ void gpuCopy(
+	TYPE* __restrict Out,
+	TYPE* __restrict In,
+	const int  n)
+{
+	int i = blockIdx.x * blockDim.x + threadIdx.x;
+	if (i < n) Out[i] = In[i];
+}
+
+
 Particle::Particle(PDPS *ps) : Pointers(ps)
 {
-	procid = parallel->procid;
+
 
 	x = NULL;
 	v = NULL;
@@ -98,6 +169,62 @@ Particle::Particle(PDPS *ps) : Pointers(ps)
 	particle_style = NULL;
 	ptype = NULL;
 	create_particle_type("atomic", 0, NULL);
+
+	//	pointer to GPU device
+	devCoordX = NULL;
+	devCoordY = NULL;
+	devCoordZ = NULL;
+	devVeloX = NULL;
+	devVeloY = NULL;
+	devVeloZ = NULL;
+	devVestX = NULL;
+	devVestY = NULL;
+	devVestZ = NULL;
+	devForceX = NULL;
+	devForceY = NULL;
+	devForceZ = NULL;
+	devMask = NULL;
+	devMass = NULL;
+	devTag = NULL;
+	devType = NULL;
+	devRho = NULL;
+	devRadius = NULL;
+	devRmass = NULL;
+	devDensity = NULL;
+	devPoro = NULL;
+	devVolume = NULL;
+
+	devHostCoord = NULL;
+	devHostVelo = NULL;
+	devHostVest = NULL;
+	devHostForce = NULL;
+	devHostMask = NULL;
+	devHostMassType = NULL;
+	devHostTag = NULL;
+	devHostType = NULL;
+	devHostRho = NULL;
+	devHostRadius = NULL;
+	devHostRmass = NULL;
+	devHostDensity = NULL;
+	devHostPoro = NULL;
+	devHostVolume = NULL;
+
+	ptrHostCoord = NULL;
+	ptrHostVelo = NULL;
+	ptrHostVest = NULL;
+	ptrHostForce = NULL;
+	ptrHostMask = NULL;
+	ptrHostMassType = NULL;
+	ptrHostTag = NULL;
+	ptrHostType = NULL;
+	ptrHostRho = NULL;
+	ptrHostRadius = NULL;
+	ptrHostRmass = NULL;
+	ptrHostDensity = NULL;
+	ptrHostPoro = NULL;
+	ptrHostVolume = NULL;
+		
+
 }
 
 /* ---------------------------------------------------------------------- */
@@ -860,4 +987,240 @@ void Particle::save_particle(int narg, char** arg)
 				delete_particle(i);
 		}
 	}
+}
+
+//	transfer data to easy fetch memory
+/* ---------------------------------------------------------------------- */
+void Particle::PinHostArray(){
+	cudaDeviceSynchronize();
+	if (nmax){
+			ptrHostCoord = cudaEngine->PinHost(devHostCoord, &(particle->x[0][0]), 3 * particle->nmax * sizeof(double));
+			ptrHostForce = cudaEngine->PinHost(devHostForce, &(particle->f[0][0]), 3 * particle->nmax * sizeof(double));
+			ptrHostVelo = cudaEngine->PinHost(devHostVelo, &(particle->v[0][0]), 3 * particle->nmax * sizeof(double));
+			ptrHostVest = cudaEngine->PinHost(devHostVest, &(particle->vest[0][0]), 3 * particle->nmax * sizeof(double));
+			ptrHostMassType = cudaEngine->PinHost(devHostMassType, particle->mass, (particle->ntypes + 1) * sizeof(double));
+			ptrHostType = cudaEngine->PinHost(devHostType, particle->type, particle->nmax * sizeof(int));
+			ptrHostTag = cudaEngine->PinHost(devHostTag, particle->tag, particle->nmax * sizeof(int));
+			ptrHostMask = cudaEngine->PinHost(devHostMask, particle->mask, particle->nmax * sizeof(int));
+	}
+	if (rho) ptrHostRho = cudaEngine->PinHost(devHostRho, particle->rho, particle->nmax * sizeof(double));
+	if (rmass)	ptrHostRmass = cudaEngine->PinHost(devHostRmass, particle->rmass, particle->nmax * sizeof(double));
+	if (density) ptrHostDensity = cudaEngine->PinHost(devHostDensity, particle->density, particle->nmax * sizeof(double));
+	if (radius) ptrHostRadius = cudaEngine->PinHost(devHostRadius, particle->radius, particle->nmax * sizeof(double));
+	if (poro) ptrHostPoro = cudaEngine->PinHost(devHostPoro, particle->poro, particle->nmax * sizeof(double));
+	if (volume) ptrHostVolume = cudaEngine->PinHost(devHostVolume, particle->volume, particle->nmax * sizeof(double));
+
+}
+
+/* ---------------------------------------------------------------------- */
+void Particle::UnpinHostArray(){
+	cudaDeviceSynchronize();
+	if (ptrHostCoord)    cudaEngine->UnpinHost(&(particle->x[0][0]), ptrHostCoord, devHostCoord);
+	if (ptrHostForce)    cudaEngine->UnpinHost(&(particle->f[0][0]), ptrHostForce, devHostForce);
+	if (ptrHostVelo)     cudaEngine->UnpinHost(&(particle->v[0][0]), ptrHostVelo, devHostVelo);
+	if (ptrHostVest)     cudaEngine->UnpinHost(&(particle->vest[0][0]), ptrHostVest, devHostVest);
+	if (ptrHostRho)    cudaEngine->UnpinHost(particle->rho, ptrHostRho, devHostRho);
+	if (ptrHostType)    cudaEngine->UnpinHost(particle->type, ptrHostType, devHostType);
+	if (ptrHostTag)    cudaEngine->UnpinHost(particle->tag, ptrHostTag, devHostTag);
+	if (ptrHostMask)    cudaEngine->UnpinHost(particle->mask, ptrHostMask, devHostMask);
+	if (ptrHostMassType) cudaEngine->UnpinHost(particle->mass, ptrHostMassType, devHostMassType);
+	if (ptrHostRmass) cudaEngine->UnpinHost(particle->rmass, ptrHostRmass, devHostRmass);
+	if (ptrHostRadius) cudaEngine->UnpinHost(particle->radius, ptrHostRadius, devHostRadius);
+	if (ptrHostDensity) cudaEngine->UnpinHost(particle->density, ptrHostDensity, devHostDensity);
+	if (ptrHostPoro) cudaEngine->UnpinHost(particle->poro, ptrHostPoro, devHostPoro);
+	if (ptrHostVolume) cudaEngine->UnpinHost(particle->volume, ptrHostVolume, devHostVolume);
+
+}
+
+//	transfer data From CPU to GPU
+/* ---------------------------------------------------------------------- */
+void Particle::TransferC2G(){
+
+	enum cudaLimit 	limit;
+	size_t *memory, *free, *total;
+	memory = (size_t *)malloc(sizeof(size_t));
+	free = (size_t *)malloc(sizeof(size_t));
+	total = (size_t *)malloc(sizeof(size_t));
+	int *device_num;
+	device_num = (int *)malloc(sizeof(int));
+	cudaError_t cudaStatus = cudaGetDevice(device_num);
+	cudaStatus = cudaMemGetInfo(free, total);
+	//cudaStatus = cudaDeviceGetLimit(memory, limit);
+
+
+
+	int nlocal = particle->nlocal;
+	if (nlocal == 0)
+		return;
+
+	const int BLK = 512;
+	//	Therr are maximum 16 stream to run the code transfer concurrently
+	int nStream = cudaEngine->StreamPool.size();
+	vector<cudaStream_t> StreamPool = cudaEngine->StreamPool;
+	vector<cudaEvent_t> Events;
+
+	//	Transfer each terms on different streams and record the event
+	cudaStream_t &Stream = StreamPool[0];
+	cudaMemcpyAsync(devHostCoord, ptrHostCoord, 3 * nlocal * sizeof(double), cudaMemcpyHostToDevice, Stream);
+	gpuDeinterLeave << < int(nlocal + BLK - 1) / BLK, BLK, BLK * 3 * sizeof(double), Stream >> >(
+		devHostCoord, devCoordX, devCoordY, devCoordZ, nlocal);
+	Events.push_back(cudaEngine->Event("X_C2G_PREV"));
+	cudaEventRecord(Events.back(), Stream);
+
+	Stream = StreamPool[1];
+	cudaMemcpyAsync(devHostVelo, ptrHostVelo, 3 * nlocal * sizeof(double), cudaMemcpyHostToDevice, Stream);
+	gpuDeinterLeave << < int(nlocal + BLK - 1) / BLK, BLK, BLK * 3 * sizeof(double), Stream >> >(
+		devHostVelo, devVeloX, devVeloY, devVeloZ, nlocal);
+	Events.push_back(cudaEngine->Event("V_C2G_PREV"));
+	cudaEventRecord(Events.back(), Stream);
+
+	Stream = StreamPool[2];
+	cudaMemcpyAsync(devHostForce, ptrHostForce, 3 * nlocal * sizeof(double), cudaMemcpyHostToDevice, Stream);
+	gpuDeinterLeave << < int(nlocal + BLK - 1) / BLK, BLK, BLK * 3 * sizeof(double), Stream >> >(
+		devHostForce, devForceX, devForceY, devForceZ, nlocal);
+	Events.push_back(cudaEngine->Event("F_C2G_PREV"));
+	cudaEventRecord(Events.back(), Stream);
+
+	Stream = StreamPool[3];
+	cudaMemcpyAsync(devHostType, ptrHostType, nlocal * sizeof(int), cudaMemcpyHostToDevice, Stream);
+	cudaMemcpyAsync(devHostMask, ptrHostMask, nlocal * sizeof(int), cudaMemcpyHostToDevice, Stream);
+	cudaMemcpyAsync(devHostTag, ptrHostTag, nlocal * sizeof(int), cudaMemcpyHostToDevice, Stream);
+	cudaMemcpyAsync(devHostMassType, ptrHostMassType, (ntypes + 1) * sizeof(double), cudaMemcpyHostToDevice, Stream);
+	gpuCopy << < int(nlocal + BLK - 1) / BLK, BLK, 0, Stream >> > (devType, devHostType, nlocal);
+	gpuCopy << < int(nlocal + BLK - 1) / BLK, BLK, 0, Stream >> > (devMask, devHostMask, nlocal);
+	gpuCopy << < int(nlocal + BLK - 1) / BLK, BLK, 0, Stream >> > (devTag, devHostTag, nlocal);
+	gpuCopy << < int(nlocal + BLK - 1) / BLK, BLK, 0, Stream >> > (devMass, devHostMassType, ntypes + 1);
+	Events.push_back(cudaEngine->Event("T_C2G_PREV"));
+	cudaEventRecord(Events.back(), Stream);
+
+	Stream = StreamPool[4];
+	cudaMemcpyAsync(devHostRadius, ptrHostRadius, nlocal * sizeof(double), cudaMemcpyHostToDevice, Stream);
+	cudaMemcpyAsync(devHostRmass, ptrHostRmass, nlocal * sizeof(double), cudaMemcpyHostToDevice, Stream);
+	cudaMemcpyAsync(devHostRho, ptrHostRho, nlocal * sizeof(double), cudaMemcpyHostToDevice, Stream);
+	gpuCopy << < int(nlocal + BLK - 1) / BLK, BLK, 0, Stream >> > (devRadius, devHostRadius, nlocal);
+	gpuCopy << < int(nlocal + BLK - 1) / BLK, BLK, 0, Stream >> > (devRmass, devHostRmass, nlocal);
+	gpuCopy << < int(nlocal + BLK - 1) / BLK, BLK, 0, Stream >> > (devRho, devHostRho, nlocal);
+	Events.push_back(cudaEngine->Event("R_C2G_PREV"));
+	cudaEventRecord(Events.back(), Stream);
+
+	Stream = StreamPool[5];
+	cudaMemcpyAsync(devHostDensity, ptrHostDensity, nlocal * sizeof(double), cudaMemcpyHostToDevice, Stream);
+	cudaMemcpyAsync(devHostPoro, ptrHostPoro, nlocal * sizeof(double), cudaMemcpyHostToDevice, Stream);
+	cudaMemcpyAsync(devHostVolume, ptrHostVolume, nlocal * sizeof(double), cudaMemcpyHostToDevice, Stream);
+	gpuCopy << < int(nlocal + BLK - 1) / BLK, BLK, 0, Stream >> > (devDensity, devHostDensity, nlocal);
+	gpuCopy << < int(nlocal + BLK - 1) / BLK, BLK, 0, Stream >> > (devPoro, devHostPoro, nlocal);
+	gpuCopy << < int(nlocal + BLK - 1) / BLK, BLK, 0, Stream >> > (devVolume, devHostVolume, nlocal);
+	Events.push_back(cudaEngine->Event("D_C2G_PREV"));
+	cudaEventRecord(Events.back(), Stream);
+
+	Stream = StreamPool[6];
+	cudaMemcpyAsync(devHostVest, ptrHostVest, 3 * nlocal * sizeof(double), cudaMemcpyHostToDevice, Stream);
+	gpuDeinterLeave << < int(nlocal + BLK - 1) / BLK, BLK, BLK * 3 * sizeof(double), Stream >> >(
+		devHostVest, devVestX, devVestY, devVestZ, nlocal);
+	Events.push_back(cudaEngine->Event("V_C2G_PREV"));
+	cudaEventRecord(Events.back(), Stream);
+
+	//	Make sure they all stop before end the function
+	for (int i = 0; i < Events.size(); i++)
+		cudaStreamWaitEvent(StreamPool[0], Events[i], 0);
+
+}
+
+__global__ void add(int *a, int *b, int *c) {
+	c[threadIdx.x] = a[threadIdx.x] + b[threadIdx.x];
+}
+
+//	transfer data From GPU to CPU
+/* ---------------------------------------------------------------------- */
+void Particle::TransferG2C(){
+
+	enum cudaLimit 	limit;
+	size_t *memory, *free, *total;
+	memory = (size_t *)malloc(sizeof(size_t));
+	free = (size_t *)malloc(sizeof(size_t));
+	total = (size_t *)malloc(sizeof(size_t));
+	int *device_num;
+	device_num = (int *)malloc(sizeof(int));
+	cudaError_t cudaStatus = cudaGetDevice(device_num);
+	cudaStatus = cudaMemGetInfo(free, total);
+	//cudaStatus = cudaDeviceGetLimit(memory, limit);
+
+	int nlocal = particle->nlocal;
+	if (nlocal == 0)
+		return;
+
+	const int BLK = 512;
+
+
+	double *test, *devtest;
+	test = (double *)malloc(4 * sizeof(double));
+	cudaMalloc((void **)&devtest, 4 * sizeof(double));
+	//gputest << < 4, 4 >> > (devCoordX);
+	//cudaMemcpy(test, devCoordX, 10 * sizeof(double), cudaMemcpyDeviceToHost);
+	gputest << < 1, 4 >> > (devtest);
+
+	cudaMemcpy(test, devtest, 4 * sizeof(double), cudaMemcpyDeviceToHost);
+
+	//	Therr are maximum 16 stream to run the code transfer concurrently
+	int nStream = cudaEngine->StreamPool.size();
+	vector<cudaStream_t> StreamPool = cudaEngine->StreamPool;
+	vector<cudaEvent_t> Events;
+
+	//	Transfer each terms on different streams and record the event
+	cudaStream_t &Stream = StreamPool[0];
+	gpuInterLeave << < int(nlocal + BLK - 1) / BLK, BLK, BLK * 3 * sizeof(double), Stream >> >(
+		devHostCoord, devCoordX, devCoordY, devCoordZ, nlocal); 
+	cudaMemcpyAsync(ptrHostCoord, devHostCoord, 3 * nlocal * sizeof(double), cudaMemcpyDeviceToHost, Stream);
+	Events.push_back(cudaEngine->Event("X_G2C_PREV"));
+	cudaEventRecord(Events.back(), Stream);
+
+	Stream = StreamPool[1];
+	gpuInterLeave << < int(nlocal + BLK - 1) / BLK, BLK, BLK * 3 * sizeof(double), Stream >> >(
+		devHostVelo, devVeloX, devVeloY, devVeloZ, nlocal);
+	cudaMemcpyAsync(ptrHostVelo, devHostVelo, 3 * nlocal * sizeof(double), cudaMemcpyDeviceToHost, Stream);
+	Events.push_back(cudaEngine->Event("V_G2C_PREV"));
+	cudaEventRecord(Events.back(), Stream);
+
+	Stream = StreamPool[2];
+	gpuInterLeave << < int(nlocal + BLK - 1) / BLK, BLK, BLK * 3 * sizeof(double), Stream >> >(
+		devHostForce, devForceX, devForceY, devForceZ, nlocal);
+	cudaMemcpyAsync(ptrHostForce, devHostForce, 3 * nlocal * sizeof(double), cudaMemcpyDeviceToHost, Stream);
+	Events.push_back(cudaEngine->Event("F_G2C_PREV"));
+	cudaEventRecord(Events.back(), Stream);
+
+	Stream = StreamPool[3];
+	cudaMemcpyAsync(ptrHostType, devType, nlocal * sizeof(int), cudaMemcpyDeviceToHost, Stream);
+	cudaMemcpyAsync(ptrHostMask, devMask, nlocal * sizeof(int), cudaMemcpyDeviceToHost, Stream);
+	cudaMemcpyAsync(ptrHostTag, devTag, nlocal * sizeof(int), cudaMemcpyDeviceToHost, Stream);
+	cudaMemcpyAsync(ptrHostMassType, devMass, nlocal * sizeof(double), cudaMemcpyDeviceToHost, Stream);
+	Events.push_back(cudaEngine->Event("T_G2C_PREV"));
+	cudaEventRecord(Events.back(), Stream);
+
+	Stream = StreamPool[4];
+	gpuCopy << < int(nlocal + BLK - 1) / BLK, BLK, 0, Stream >> > (devRadius, devHostRadius, nlocal);
+	gpuCopy << < int(nlocal + BLK - 1) / BLK, BLK, 0, Stream >> > (devRmass, devHostRmass, nlocal);
+	cudaMemcpyAsync(ptrHostRadius, devRadius, nlocal * sizeof(double), cudaMemcpyDeviceToHost, Stream);
+	cudaMemcpyAsync(ptrHostRmass, devRmass, nlocal * sizeof(double), cudaMemcpyDeviceToHost, Stream);
+	cudaMemcpyAsync(ptrHostRho, devRho, nlocal * sizeof(double), cudaMemcpyDeviceToHost, Stream);
+	Events.push_back(cudaEngine->Event("R_G2C_PREV"));
+	cudaEventRecord(Events.back(), Stream);
+
+	Stream = StreamPool[5];
+	cudaMemcpyAsync(ptrHostDensity, devDensity, nlocal * sizeof(double), cudaMemcpyDeviceToHost, Stream);
+	cudaMemcpyAsync(ptrHostPoro, devPoro, nlocal * sizeof(double), cudaMemcpyDeviceToHost, Stream);
+	cudaMemcpyAsync(ptrHostVolume, devVolume, nlocal * sizeof(double), cudaMemcpyDeviceToHost, Stream);
+	Events.push_back(cudaEngine->Event("D_G2C_PREV"));
+	cudaEventRecord(Events.back(), Stream);
+
+	Stream = StreamPool[6];
+	gpuInterLeave << < int(nlocal + BLK - 1) / BLK, BLK, BLK * 3 * sizeof(double), Stream >> >(
+		devHostVest, devVestX, devVestY, devVestZ, nlocal);
+	cudaMemcpyAsync(ptrHostVest, devHostVest, 3 * nlocal * sizeof(double), cudaMemcpyDeviceToHost, Stream);
+	Events.push_back(cudaEngine->Event("V_G2C_PREV"));
+	cudaEventRecord(Events.back(), Stream);
+
+	//	Make sure they all stop before end the function
+	for (int i = 0; i < Events.size(); i++)
+		cudaStreamWaitEvent(StreamPool[0], Events[i], 0);
+
 }

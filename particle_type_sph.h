@@ -48,7 +48,7 @@ public:
     void unpack_border_vel(int, int, double *);
 	int pack_force(int, int *, double *, int, int *);
 	void unpack_force(int, int , double *);
-	
+
 
 	int pack_reverse(int, int, double *);
 	void unpack_reverse(int, int *, double *);

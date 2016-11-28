@@ -9,7 +9,7 @@
 
 #include "stdlib.h"
 #include "string.h"
-
+#include "timer.h"
 #include "analyze.h"
 #include "compute.h"
 #include "fix.h"
@@ -252,8 +252,11 @@ void Modify::final_integrate()
 
 void Modify::post_integrate()
 {
-	for (int i = 0; i < n_post_integrate; i++) 
-		fix[list_post_integrate[i]]->post_integrate();
+	for (int i = 0; i < n_post_force; i++) {
+		timer->stamp();
+		fix[list_post_force[i]]->post_force();
+		timer->stamp(TIME_FIX1 + i);
+	}
 }
 
 /* ----------------------------------------------------------------------
@@ -363,7 +366,9 @@ post_force call, only for relevant fixes
 void Modify::pre_force()
 {
 	for (int i = 0; i < n_pre_force; i++) {
+		timer->stamp();
 		fix[list_pre_force[i]]->pre_force();
+		timer->stamp(TIME_PREFIX1 + i);
 	}
 }
 
@@ -374,7 +379,9 @@ void Modify::pre_force()
 void Modify::post_force()
 {
 	for (int i = 0; i < n_post_force; i++) {
+		timer->stamp();
 		fix[list_post_force[i]]->post_force();
+		timer->stamp(TIME_FIX1 + i);
 	}
 }
 

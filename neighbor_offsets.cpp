@@ -38,11 +38,11 @@ void Neighbor::offsets_allocate()
 	if (dim == 2) co[2] = 0;
 
 	cox = co[0];
-	coy = co[1];
+ 	coy = co[1];
 	coz = co[2];
 
 	// maximum offsets
-	co_max = (2*cox + 1)*(2*coy + 1)*(2*coz + 1);
+	co_max = (2 *cox + 1)*(2 *coy + 1)*(2 * coz + 1);
 
 	if (style == SINGLE) {
 		// if coffsets has been allocated before

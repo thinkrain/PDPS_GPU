@@ -22,6 +22,11 @@
 #include "update.h"
 #include "v_verlet.h"
 
+#include "pdps_cuda.h"
+#include "cuda_engine.h"
+#include "device_launch_parameters.h"
+#include "device_functions.h"
+
 using namespace PDPS_NS;
 
 /* ---------------------------------------------------------------------- */
@@ -50,6 +55,8 @@ void V_Verlet::init()
 
 void V_Verlet::setup()
 {
+	particle->TransferC2G();
+	// Copy inputs to device
 	output->print("PDPS is setting up...\n");
 	// setup domain and neighbor list
 	domain->pbc();
@@ -78,6 +85,7 @@ void V_Verlet::setup()
 
 	output->setup();
 
+
 }
 
 /* ----------------------------------------------------------------------
@@ -100,29 +108,34 @@ void V_Verlet::run(int n)
 	ntimestep = update->ntimestep;
 
 	// Output initial structure 
-
 	for (int i = 0; i < n; i++) {
 		ntimestep = ++update->ntimestep;
 		ev_set(ntimestep);
 
 
+		timer->stamp();
 		// group or region may be dynamic
 		update->dynamic_check();
+		timer->stamp(TIME_SETUP);
 
 		if (n_pre_integrate) modify->pre_integrate();
 		// first integration of Verlet algorithm
 		modify->initial_integrate();
 		if (n_post_integrate) modify->post_integrate();
+		timer->stamp(TIME_UPDATE);
 
+		particle->TransferG2C();
 		// build neighbor
 		nflag = neighbor->decide();
 		if (nflag == 1) {
 		
 			domain->pbc();
 			if (domain->box_change) {
+				timer->stamp();
 				domain->reset_box();
 				parallel->setup();
 				neighbor->setup_cells();   // setup cells for creating linked list
+				timer->stamp(TIME_SETUP);
 			}
 			timer->stamp();
 			parallel->exchange();
@@ -142,14 +155,9 @@ void V_Verlet::run(int n)
 		force->clear();
 		if (n_pre_force) modify->pre_force();
 
+		force->compute(eflag, vflag);
 		timer->stamp();
-		force->compute(eflag,vflag);
-		timer->stamp(TIME_PAIR);
-//		if (parallel->procid == 1 && update->ntimestep == 236)
-//			printf("before reverse tag[24] = %d f[24] = %f\n", particle->tag[24], particle->f[24][0]);
 		parallel->reverse_comm();
-		if (parallel->procid == 1 && update->ntimestep == 236)
-			printf("after reverse tag[24] = %d f[24] = %f\n", particle->tag[24], particle->f[24][0]);
 		timer->stamp(TIME_COMM);
 
 		// force modifications
@@ -159,10 +167,12 @@ void V_Verlet::run(int n)
 		// second integration of Verlet algorithm
 		modify->final_integrate();
 		if (n_end_of_step) modify->end_of_step();
-
+		timer->stamp(TIME_UPDATE);
 		if (nanalyzes) modify->check_analyze();
-		
+		timer->stamp(TIME_ANALYZE);
+
 		// output 
+		
 		timer->stamp();
 		output->write();
 		timer->stamp(TIME_OUTPUT);

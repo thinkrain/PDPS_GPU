@@ -44,6 +44,7 @@ namespace PDPS_NS {
 		int sgid, sgroupbit, lgid, lgroupbit;					//	group bit for liquid particles and solid particles
 		double *rho0, *soundspeed, *B;							//	parameters in SPH governing equation
 		int cubic_flag, quintic_flag;							//	flag to use which kernel function
+
 	};
 
 }

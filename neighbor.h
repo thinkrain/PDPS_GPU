@@ -72,7 +72,25 @@ public:
 	double find_distance(int, int);             // return distance^2
 
 	void debug();
-	  
+
+	// GPU parameters
+	double *devRneighsq;
+	int *devNumneigh;
+	int *devPairtable;
+
+	//	GPU temp parameters for debug
+	double *hostCoordX;
+	double *hostCoordY;
+	double *hostCoordZ;
+	double *hostForceX;
+	double *hostForceY;
+	double *hostForceZ;
+	double *hostVeloX;
+	double *hostVeloY;
+	double *hostVeloZ;
+	int *hostPairtable;
+	int *hostNumneigh;
+
 protected:
     int procid, nprocs;
 
@@ -146,6 +164,23 @@ protected:
 
 	void offsets_half_single();
 	void offsets_half_multi();
+
+
+	//	GPU parameters
+	int *devCoffsets;
+	int *devLinked_list;
+	int *devHead;
+	double *devBoxle;
+	double *devCle;
+	int *devNc;
+
+	int *devSubclo;
+	int *devSubnc;
+	double *devBoxhi;
+	double *devBoxlo;
+
+
+	
 
 private:
 };

@@ -82,8 +82,7 @@ public:
 	void save_particle(int narg, char** arg);
 
 	int count_words(const char *);
-	
-	
+
 
 	// map
 	inline int map(int global) {
@@ -102,28 +101,45 @@ public:
 	int map_tag_max;
 
 	//	variable in GPU
-	int *devTag;
-	int *devType;
-	int *devMask;
+	int *devTag, *devType, *devMask;
 	double *devMass;
-	double *devCoordX;
-	double	*devCoordY;
-	double	*devCoordZ;
-	double	*devForceX;
-	double	*devForceY;
-	double	*devForceZ;
-	double	*devVeloX;
-	double	*devVeloY;
-	double	*devVeloZ;
+	double *devCoordX, *devCoordY, *devCoordZ;
+	double	*devForceX, *devForceY, *devForceZ;
+	double	*devVeloX, *devVeloY, *devVeloZ;
+	double	*devVestX, *devVestY, *devVestZ;
+	double  *devRho, *devRadius, *devRmass, *devDensity, *devPoro, *devVolume;
 
 	// pointer to pre-allocated device buffer
 	double	*devHostCoord;
 	double	*devHostVelo;
+	double  *devHostVest;
 	double	*devHostForce;
+	double  *devHostRho;
 	int *devHostTag;
 	int *devHostType;
 	int *devHostMask;
 	double	*devHostMassType;
+	double *devHostRadius, *devHostRmass, *devHostDensity, *devHostPoro, *devHostVolume;
+
+	// pointer to host memory, e.g. atom->x
+	double	*ptrHostCoord;
+	double	*ptrHostVelo;
+	double  *ptrHostVest;
+	double	*ptrHostForce;
+	double  *ptrHostRho;
+	int *ptrHostTag;
+	int *ptrHostType;
+	int *ptrHostMask;
+	double	*ptrHostMassType;
+	double *ptrHostRadius, *ptrHostRmass, *ptrHostDensity, *ptrHostPoro, *ptrHostVolume;
+
+	//	GPU pin memory
+	void PinHostArray();
+	void UnpinHostArray();
+	void TransferC2G();
+	void TransferG2C();
+
+	// transfer data from CPU to GPU
 
 private:
 	int procid;

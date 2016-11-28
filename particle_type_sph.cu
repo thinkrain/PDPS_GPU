@@ -15,9 +15,10 @@
 #include "memory.h"
 #include "parallel.h"
 #include "particle.h"
-//#include "particle_type.h"
+#include "pdps_cuda.h"
 #include "particle_type_sph.h"
 
+#include "cuda_runtime.h"
 using namespace PDPS_NS;
 
 #define DELTA 10000  
@@ -66,9 +67,13 @@ ParticleTypeSph::~ParticleTypeSph()
 
 void ParticleTypeSph::grow(int n)
 {
+
 	if (n == 0) nmax += DELTA;
 	else nmax = n;
 	particle->nmax = nmax;
+
+	//	unpin memories from GPU easy access memories
+	particle->UnpinHostArray();
 
 	// nmax < 0: overflow
 	if (nmax < 0 || nmax > BIG) {
@@ -95,6 +100,56 @@ void ParticleTypeSph::grow(int n)
 	poro = memory->grow(particle->poro, nmax, "particle: poro");
 	volume = memory->grow(particle->volume, nmax, "particle: volume");
 	hlocal = memory->grow(particle->hlocal, nmax, "particle: hlocal");
+
+	//	Allocate memory in GPU
+
+	cudaMalloc(&particle->devCoordX, nmax  * sizeof(double));
+	cudaMalloc(&particle->devCoordY, nmax  * sizeof(double));
+	cudaMalloc(&particle->devCoordZ, nmax  * sizeof(double));
+	cudaMalloc(&particle->devVeloX, nmax  * sizeof(double));
+	cudaMalloc(&particle->devVeloY, nmax * sizeof(double));
+	cudaMalloc(&particle->devVeloZ, nmax * sizeof(double));
+	cudaMalloc(&particle->devVestX, nmax  * sizeof(double));
+	cudaMalloc(&particle->devVestY, nmax * sizeof(double));
+	cudaMalloc(&particle->devVestZ, nmax * sizeof(double));
+	cudaMalloc(&particle->devForceX, nmax * sizeof(double));
+	cudaMalloc(&particle->devForceY, nmax * sizeof(double));
+	cudaMalloc(&particle->devForceZ, nmax * sizeof(double));
+	cudaMalloc(&particle->devMass, 10 * sizeof(double));
+	cudaMalloc(&particle->devTag, nmax * sizeof(int));
+	cudaMalloc(&particle->devType, nmax * sizeof(int));
+	cudaMalloc(&particle->devMask, nmax  * sizeof(int));
+	cudaMalloc(&particle->devRho, nmax * sizeof(double));
+	cudaMalloc(&particle->devDensity, nmax * sizeof(double));
+	cudaMalloc(&particle->devRadius, nmax * sizeof(double));
+	cudaMalloc(&particle->devRmass, nmax * sizeof(double));
+	cudaMalloc(&particle->devPoro, nmax * sizeof(double));
+	cudaMalloc(&particle->devVolume, nmax * sizeof(double));
+	//	pin memory to memories when GPU has easy access
+	particle->PinHostArray();
+
+
+	int *a, *b, *c; // host copies of a, b, c
+	int *d_a, *d_b, *d_c; // device copies of a, b, c
+	int N = 4;
+	size_t size = N * sizeof(int);
+	cudaError_t  cudaStatus, error_t, error_t2;
+	// Alloc space for device copies of a, b, c
+	cudaStatus = cudaMalloc((void **)&d_a, size);
+	cudaStatus = cudaMalloc((void **)&d_b, size);
+	cudaStatus = cudaMalloc((void **)&d_c, size);
+	// Alloc space for host copies of a, b, c and setup input values
+	a = (int *)malloc(size);
+	b = (int *)malloc(size);
+	c = (int *)malloc(size);
+	for (int i = 0; i < 4; i++){
+		a[i] = i;
+		b[i] = i;
+	}
+
+	// Copy inputs to device
+	error_t = cudaMemcpy(d_a, a, 1, cudaMemcpyHostToDevice);
+	error_t2 = cudaMemcpy(d_b, b, size, cudaMemcpyHostToDevice);
 
 }
 
@@ -825,3 +880,4 @@ int ParticleTypeSph::pack_force(int n, int *list, double *buf,
 
 	return m;
 }
+

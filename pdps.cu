@@ -40,6 +40,7 @@ using namespace PDPS_NS;
 
 PDPS::PDPS(int narg, char** arg, MPI_Comm world) 
 {
+
 	mworld = world;
 
 	int    device = 0;
@@ -186,6 +187,7 @@ void PDPS::init()
 	parallel->init();
 	output->init();
 	timer->init();
+	cudaEngine->Init(0, "all");
 }
 
 /* ----------------------------------------------------------------------

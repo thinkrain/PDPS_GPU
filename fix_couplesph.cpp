@@ -198,21 +198,24 @@ void FixCouplesph::post_force()
 
 			if (weight > 0.001)
 			{
-				f[i][0] = fx / weight * volume[i] * rho_ref / jmass;
-				f[i][1] = fy / weight * volume[i] * rho_ref / jmass;
-				f[i][2] = fz / weight * volume[i] * rho_ref / jmass;
 
 				if (poroset_flag == 1){
-					f[i][0] = f[i][0] / poroset;
-					f[i][1] = f[i][1] / poroset;
-					f[i][2] = f[i][2] / poroset;
+					fx = fx / poroset;
+					fy = fy / poroset;
+					fz = fz / poroset;
 				}
 				if (poro_flag == 1){
-					f[i][0] = f[i][0] / (1 - poro[i]);
-					f[i][1] = f[i][1] / (1 - poro[i]);
-					f[i][2] = f[i][2] / (1 - poro[i]);
+					fx = fx / (1 - poro[i]);
+					fy = fy / (1 - poro[i]);
+					fz = fz / (1 - poro[i]);
 
 				}
+
+				f[i][0] += fx / weight * volume[i] * rho_ref / jmass;
+				f[i][1] += fy / weight * volume[i] * rho_ref / jmass;
+				f[i][2] += fz / weight * volume[i] * rho_ref / jmass;
+
+				
 
 
 			}

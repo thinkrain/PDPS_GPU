@@ -18,10 +18,40 @@
 #include "region.h"
 
 #include "update.h"
+#include "neighbor.h"
 
+#include "pdps_cuda.h"
+#include "cuda_engine.h"
+#include "device_launch_parameters.h"
+#include "device_functions.h"
 using namespace PDPS_NS;
 using namespace FixConst;
 
+
+__global__ void gpuacc(double *devCoordX, double *devCoordY, double *devCoordZ, int *devMask, const int groupbit,
+						const int nlocal, double *devForceX, double *devForceY, double *devForceZ,
+						const double xacc, const double yacc, const double zacc, double *devMass, int *devType){
+	int i = blockIdx.x * blockDim.x + threadIdx.x;
+	__shared__ double acc[3];
+	__shared__ double mass[10];
+	acc[0] = xacc;
+	acc[1] = yacc;
+	acc[2] = zacc;
+	for (int tid = 0; tid < 10; tid++)
+		mass[tid] = devMass[tid];
+	__syncthreads();
+	for (i = i; i < nlocal; i += blockDim.x * gridDim.x){
+		if (devMask[i] & groupbit){
+			int itype = devType[i];
+			devForceX[i] += mass[itype] * acc[0];
+			devForceY[i] += mass[itype] * acc[1];
+			devForceZ[i] += mass[itype] * acc[2];
+		}
+
+	}
+
+
+}
 /* ---------------------------------------------------------------------- */
 
 FixAcc::FixAcc(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
@@ -105,18 +135,30 @@ void FixAcc::post_force()
 
 	int inside_flag;
 
-	for (int i = 0; i < nlocal; i++) {
-		if (mask[i] & groupbit) {
-			if (region_flag == 1) {
-				inside_flag = domain->regions[rid]->inside(x[i]);
-				if (inside_flag == 0) continue;
-			}
-			if (sphere_flag) 
-				massone = rmass[i];
-			else massone = mass[type[i]];
-			f[i][0] += massone*xacc;
-			f[i][1] += massone*yacc;
-			f[i][2] += massone*zacc;
-		}
-	}
+	//for (int i = 0; i < nlocal; i++) {
+	//	if (mask[i] & groupbit) {
+	//		if (region_flag == 1) {
+	//			inside_flag = domain->regions[rid]->inside(x[i]);
+	//			if (inside_flag == 0) continue;
+	//		}
+	//		if (sphere_flag) 
+	//			massone = rmass[i];
+	//		else massone = mass[type[i]];
+	//		f[i][0] += massone*xacc;
+	//		f[i][1] += massone*yacc;
+	//		f[i][2] += massone*zacc;
+	//	}
+	//}
+	cudaError_t error_t;
+	error_t = cudaMemcpy(neighbor->hostForceX, particle->devForceX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	error_t = cudaMemcpy(neighbor->hostForceY, particle->devForceY, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	error_t = cudaMemcpy(neighbor->hostForceZ, particle->devForceZ, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+
+	gpuacc << < GRID_SIZE, BLOCK_SIZE >> >(particle->devCoordX, particle->devCoordY, particle->devCoordZ, particle->devMask, groupbit,
+		nlocal, particle->devForceX, particle->devForceY, particle->devForceZ,
+		xacc, yacc, zacc, particle->devMass, particle->devType);
+	error_t = cudaMemcpy(neighbor->hostForceX, particle->devForceX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	error_t = cudaMemcpy(neighbor->hostForceY, particle->devForceY, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	error_t = cudaMemcpy(neighbor->hostForceZ, particle->devForceZ, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	//particle->TransferG2C();
 }

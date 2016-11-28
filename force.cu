@@ -20,14 +20,27 @@
 #include "pair.h"
 #include "style_pair.h"
 #include "particle.h"
-
+#include "timer.h"
 #include "update.h"
 #include "parallel.h"
 
+#include "device_launch_parameters.h"
+#include "device_functions.h"
 using namespace PDPS_NS;
 
 #define DELTA 1
 #define BIG 1.0e20
+
+__global__ void gpuforce_clear(const int nall, double *devForceX, double *devForceY, double *devForceZ){
+	int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if (i < nall){
+		devForceX[i] = 0.0;
+		devForceY[i] = 0.0;
+		devForceZ[i] = 0.0;
+	}
+
+}
 
 /* ---------------------------------------------------------------------- */
 
@@ -132,6 +145,7 @@ void Force::clear()
 	for (int j = 0; j < 6; j++) {
 		pair[i]->virial[j] = 0.0;
 	}
+	gpuforce_clear << < (nall + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE >> >(nall, particle->devForceX, particle->devForceY, particle->devForceZ);
 
 }
 
@@ -143,7 +157,9 @@ void Force::compute(int eflag, int vflag)
 {
 	// scan all pairs
 	for (int i = 0; i < npairs; i++) {
-		pair[i]->compute(eflag,vflag);
+		timer->stamp();
+		pair[i]->compute(eflag, vflag);
+		timer->stamp(TIME_PAIR1 + i);
 	}
 }
 

@@ -25,6 +25,7 @@ See the README file in the PDPS directory.
 #include "parallel.h"
 #include "particle.h"
 #include "update.h"
+#include "style_analyze.h"
 
 using namespace PDPS_NS;
 
@@ -381,7 +382,7 @@ void AnalyzeHomogeneity::compute_analyze()
 {
 	int aid;
 	aid = field_index[ifield];
-
+	analyze = modify->analyze;
 	if (analyze[aid]->scalar_flag) {
 		 
 	}

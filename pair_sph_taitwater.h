@@ -35,9 +35,15 @@ protected:
 	double a2D, a3D, h;					//	parameters in SPH governing equation
 	double *rho0, *soundspeed, *B;
 	double **viscosity;
+	int visc_flag = 0;
 	int first;
 	int cubic_flag, quintic_flag;		//	flag to choose which kernel function
 	void allocate();
+
+	//GPU parameters
+	double *devRho0, *devSoundspeed, *devB, *devVisc;
+	double *hostVisc;
+
 };
 
 }

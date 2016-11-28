@@ -41,6 +41,7 @@ public:
 	void grow(int);
 	int **add_pages(int);
 
+
 private:
 	int nmax_neigh;
 };

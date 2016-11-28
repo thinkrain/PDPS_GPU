@@ -15,6 +15,11 @@
 
 namespace PDPS_NS {
 
+#define BLOCK_SIZE 512
+#define GRID_SIZE 8
+#define TYPEMAX 10
+#define NEIGHMAX 500
+
 class PDPS {
  public:
                                  // ptrs to fundamental LAMMPS classes

@@ -68,6 +68,8 @@ void Neighbor::half_linkedlist(NeighList *neighlist)
 		// reset # of neighbor particles
 		numneigh[inum] = 0;
 		// Scan neighbor cells including itself
+		if (i == 268)
+			i = i;
 		
 		for (int io = 0; io < noffsets; io++) {
 			// find the cell index to be scan
