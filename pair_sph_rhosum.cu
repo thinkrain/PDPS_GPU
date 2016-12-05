@@ -37,11 +37,11 @@ __global__ void gpuComputerho(double *devCoordX, double *devCoordY, double *devC
 	double *devRho, double *devMass, int *devType, int *devMask, const double h,
 	const int nlocal, const double a3D, int *devSetflag, double *devCutsq){
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
-	double wf, xtemp, ytemp, ztemp, rsq, delx, dely, delz, q;
+	float wf, xtemp, ytemp, ztemp, rsq, delx, dely, delz, q;
 	int j, jj, itype, jtype, jnum;
-	__shared__ double mass[TYPEMAX];
+	__shared__ float mass[TYPEMAX];
 	__shared__ int setflag[TYPEMAX * TYPEMAX];
-	__shared__ double cutsq[TYPEMAX * TYPEMAX];
+	__shared__ float cutsq[TYPEMAX * TYPEMAX];
 	for (int tid = 0; tid < TYPEMAX; tid++){
 		mass[tid] = devMass[tid];
 		for (j = 0; j < TYPEMAX; j++){
@@ -66,7 +66,8 @@ __global__ void gpuComputerho(double *devCoordX, double *devCoordY, double *devC
 		itype = devType[i];
 		if (setflag[itype * TYPEMAX + itype] == 1){
 			wf = a3D;
-			devRho[i] = mass[itype] * wf;
+			double irho = mass[itype] * wf;
+			irho = mass[itype] * wf;
 			xtemp = devCoordX[i];
 			ytemp = devCoordY[i];
 			ztemp = devCoordZ[i];
@@ -89,14 +90,13 @@ __global__ void gpuComputerho(double *devCoordX, double *devCoordY, double *devC
 						wf = wf * a3D;
 						//  detect solid particle for local average
 
-						devRho[i] += mass[jtype] * wf;
-
+						irho += mass[jtype] * wf;
 
 					}		//  rsq < cutsq[itype][jtype]
 
 				}	// setflag[itype * 10 + jtype]
 			}	// j < jnum
-
+			devRho[i] = irho;
 		}	//	setflag[itype * TYPEMAX + itype]
 
 	}	// i < nlocal
@@ -335,17 +335,28 @@ void PairSPH_RHOSUM::compute(int eflag, int vflag)
 
 		//}
 
-		cudaError_t error_t;
-		error_t = cudaMemcpy(particle->ptrHostRho, particle->devRho, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
-		gpuComputerho << < GRID_SIZE, BLOCK_SIZE >> >(particle->devCoordX, particle->devCoordY, particle->devCoordZ,
+	//	cudaError_t error_t;
+	//	error_t = cudaMemcpy(particle->ptrHostRho, particle->devRho, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	cudaEvent_t start, stop;
+	float time;
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+	cudaEventRecord(start, 0);
+
+		gpuComputerho << < int(nlocal + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE >> >(particle->devCoordX, particle->devCoordY, particle->devCoordZ,
 			neighbor->devPairtable, neighbor->devNumneigh, particle->devRho, particle->devMass,
 			particle->devType, particle->devMask, h, nlocal, a3D, devSetflag, devCutsq);
-		error_t = cudaMemcpy(hostSetflag, devSetflag, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
-		error_t = cudaMemcpy(hostCutsq, devCutsq, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
-		error_t = cudaMemcpy(particle->ptrHostRho, particle->devRho, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
-		error_t = cudaMemcpy(neighbor->hostNumneigh, neighbor->devNumneigh, particle->nlocal * sizeof(int), cudaMemcpyDeviceToHost);
-		error_t = cudaMemcpy(neighbor->hostPairtable, neighbor->devPairtable, particle->nlocal * NEIGHMAX * sizeof(int), cudaMemcpyDeviceToHost);
-		error_t = error_t;
+
+		cudaEventRecord(stop, 0);
+		cudaEventSynchronize(stop);
+		cudaEventElapsedTime(&time, start, stop);
+		time = time;
+		//error_t = cudaMemcpy(hostSetflag, devSetflag, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+		//error_t = cudaMemcpy(hostCutsq, devCutsq, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+//		error_t = cudaMemcpy(particle->ptrHostRho, particle->devRho, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+		//error_t = cudaMemcpy(neighbor->hostNumneigh, neighbor->devNumneigh, particle->nlocal * sizeof(int), cudaMemcpyDeviceToHost);
+		//error_t = cudaMemcpy(neighbor->hostPairtable, neighbor->devPairtable, particle->nlocal * NEIGHMAX * sizeof(int), cudaMemcpyDeviceToHost);
+		//error_t = error_t;
 	}
 
 }

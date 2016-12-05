@@ -104,6 +104,7 @@ public:
 	int *devTag, *devType, *devMask;
 	double *devMass;
 	double *devCoordX, *devCoordY, *devCoordZ;
+	double *devCoordXold, *devCoordYold, *devCoordZold;
 	double	*devForceX, *devForceY, *devForceZ;
 	double	*devVeloX, *devVeloY, *devVeloZ;
 	double	*devVestX, *devVestY, *devVestZ;

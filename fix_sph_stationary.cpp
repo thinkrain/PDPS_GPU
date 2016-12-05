@@ -52,12 +52,12 @@ void FixSPH_STATIONARY::initial_integrate()
 	int nlocal = particle->nlocal;
 	int i;
 
-	for (i = 0; i < nlocal; i++) {
-		if (mask[i] & groupbit) {
-			e[i] += dtf * de[i]; // half-step update of particle internal energy
-//			rho[i] += dtf * drho[i]; // ... and density
-		}
-	}
+//	for (i = 0; i < nlocal; i++) {
+//		if (mask[i] & groupbit) {
+//			e[i] += dtf * de[i]; // half-step update of particle internal energy
+////			rho[i] += dtf * drho[i]; // ... and density
+//		}
+//	}
 
 
 }
@@ -73,12 +73,12 @@ void FixSPH_STATIONARY::final_integrate()
 	int *mask = particle->mask;
 	int nlocal = particle->nlocal;
 
-	for (int i = 0; i < nlocal; i++) {
-		if (mask[i] & groupbit) {
-			e[i] += dtf * de[i];
-//			rho[i] += dtf * drho[i];
-		}
-	}
+//	for (int i = 0; i < nlocal; i++) {
+//		if (mask[i] & groupbit) {
+//			e[i] += dtf * de[i];
+////			rho[i] += dtf * drho[i];
+//		}
+//	}
 }
 
 /* ---------------------------------------------------------------------- */

@@ -20,10 +20,9 @@
 #include "pair.h"
 #include "style_pair.h"
 #include "particle.h"
-#include "timer.h"
 #include "update.h"
 #include "parallel.h"
-
+#include "timer.h"
 #include "device_launch_parameters.h"
 #include "device_functions.h"
 using namespace PDPS_NS;
@@ -129,23 +128,31 @@ void Force::setup()
 void Force::clear()
 {
 	int nall = particle->nlocal + particle->nghost;
-	
+	//
 
-	for (int i = 0; i < nall; i++){
-		particle->de[i] = 0.0;
-		particle->drho[i] = 0.0;
-		for (int j = 0; j < 3; j++) {
-			particle->f[i][j] = 0.0;
-			if (particle->torque_flag) particle->torque[i][j] = 0.0;
-		}
-	}
-	
+	//for (int i = 0; i < nall; i++){
+	//	particle->de[i] = 0.0;
+	//	particle->drho[i] = 0.0;
+	//	for (int j = 0; j < 3; j++) {
+	//		particle->f[i][j] = 0.0;
+	//		if (particle->torque_flag) particle->torque[i][j] = 0.0;
+	//	}
+	//}
+	//
 
-	for (int i = 0; i < npairs; i++) 
-	for (int j = 0; j < 6; j++) {
-		pair[i]->virial[j] = 0.0;
-	}
-	gpuforce_clear << < (nall + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE >> >(nall, particle->devForceX, particle->devForceY, particle->devForceZ);
+	//for (int i = 0; i < npairs; i++) 
+	//for (int j = 0; j < 6; j++) {
+	//	pair[i]->virial[j] = 0.0;
+	//}
+	//cudaEvent_t start, stop;
+	//float time;
+	//cudaEventCreate(&start);
+	//cudaEventCreate(&stop);
+	//cudaEventRecord(start, 0);
+	gpuforce_clear << < int(nall + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE >> >(nall, particle->devForceX, particle->devForceY, particle->devForceZ);
+	//cudaEventRecord(stop, 0);
+	//cudaEventSynchronize(stop);
+	//cudaEventElapsedTime(&time, start, stop);
 
 }
 

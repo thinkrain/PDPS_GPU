@@ -22,6 +22,8 @@
 #include "particle.h"
 #include "pair.h"
 #include "update.h"
+#include "group.h"
+#include "timer.h"
 
 #include "pdps_cuda.h"
 #include "cuda_engine.h"
@@ -113,8 +115,8 @@ __global__ void gpulinklist(int *devLinked_list, int *devHead, int *devSubclo, i
  
 //	build the whole neighbor list, not half
 __global__  void gpuneighbuild(int *devLinked_list, int *devHead, int *devNumneigh, int *devPairtable, int *devCoffsets, const int devNoffsets, 
-	int *devSubclo, int *devSubnc, double *devBoxhi, double *devBoxlo, double *devCle, int *devNc, double *devRneighsq, 
-	const int nlocal, const int subncxyz, const int subncxy, double *devCoordX, double *devCoordY, double *devCoordZ, int *devType){
+	int *devSubclo, int *devSubnc, double *devBoxhi, double *devBoxlo, double *devCle, int *devNc, double *devRneighsq, int *devMask,
+	const int nlocal, const int subncxyz, const int subncxy, double *devCoordX, double *devCoordY, double *devCoordZ, int *devType, const int slave_bit){
 
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 	int ic[3];
@@ -142,8 +144,9 @@ __global__  void gpuneighbuild(int *devLinked_list, int *devHead, int *devNumnei
 	}
 	__syncthreads();
 
-	if (i < nlocal){
-
+	for (i = i; i < nlocal; i += blockDim.x * gridDim.x){
+		if (devMask[i] & slave_bit)
+			continue;
 		int numneigh = 0;
 		itype = devType[i];
 		double xi = devCoordX[i];
@@ -235,11 +238,93 @@ __global__  void gpuneighbuild(int *devLinked_list, int *devHead, int *devNumnei
 
 }
 
+//	build the whole neighbor list, not half
+__global__  void gpuneighbuild2(int *devNumneigh, int *devPairtable, double *devRneighsq, const double Rcut, int *devMask,
+	const int nlocal,double *devCoordX, double *devCoordY, double *devCoordZ, int *devType, const int slave_bit){
+
+	int i = blockIdx.x * blockDim.x + threadIdx.x;
+	int j, itype, jtype;
+	double rijsq, dx, dy, dz;
+
+	__shared__ double rneighsq[TYPEMAX * TYPEMAX];
+
+	for (itype = 0; itype < TYPEMAX; itype++){
+		for (jtype = 0; jtype < TYPEMAX; jtype++)
+			rneighsq[itype * TYPEMAX + jtype] = devRneighsq[itype * TYPEMAX + jtype];
+	}
+	__syncthreads();
+
+	for (i = i; i < nlocal; i += blockDim.x * gridDim.x){
+		if (devMask[i] & slave_bit)
+			continue;
+		int numneigh = 0;
+		itype = devType[i];
+		double xi = devCoordX[i];
+		double yi = devCoordY[i];
+		double zi = devCoordZ[i];
+		
+		for (int jj = i; jj < nlocal + i; jj++){
+			if (jj > nlocal)
+				j = jj - nlocal;
+			else
+				j = jj;
+			dx = xi - devCoordX[j];
+			if (dx > -Rcut && dx < Rcut){
+				dy = yi - devCoordY[j];
+				if (dy > -Rcut && dy < Rcut){
+					dz = zi - devCoordZ[j];
+					if (dz > -Rcut && dz < Rcut){
+						if (j == i)
+							continue;
+						rijsq = dx * dx + dy * dy + dz * dz;
+						jtype = devType[j];
+						if (rijsq < rneighsq[itype * TYPEMAX + jtype]){
+							devPairtable[i * NEIGHMAX + numneigh] = j;
+							numneigh++;
+						}	//	rijsq
+					}	//	dz
+				}	//	dy
+			}	// dx
+		}	// j < nlocal
+		devNumneigh[i] = numneigh;
+
+	}	// i < nlocal
+
+
+}
+
+__global__  void gpucheck_distance(double *devCoordX, double *devCoordY, double *devCoordZ, double *devCoordXold, double *devCoordYold, double *devCoordZold,
+							const int nlocal, const double delta, int *build_flag){
+	int i = blockDim.x * blockIdx.x + threadIdx.x;
+	double dx, dy, dz, rsq;
+	for (i = i; i < nlocal; i += blockDim.x * gridDim.x){
+		dx = devCoordX[i] - devCoordXold[i];
+		dy = devCoordY[i] - devCoordYold[i];
+		dz = devCoordZ[i] - devCoordZold[i];
+		rsq = dx * dx + dy * dy + dz * dz;
+		if (rsq > delta)
+			build_flag[0] = 1;
+	}
+}
+
+// copy data between device
+template<class TYPE> __global__ void gpuTransfer(
+	TYPE* __restrict Out,
+	TYPE* __restrict In,
+	const int  n)
+{
+	int i = blockIdx.x * blockDim.x + threadIdx.x;
+	for (i = i; i < n; i += blockDim.x * gridDim.x)
+		Out[i] = In[i];
+}
+
 Neighbor::Neighbor(PDPS *ps) : Pointers(ps)
 {
 	procid = parallel->procid;
 
 	head = NULL;
+	head_slave = NULL;
+	slave_linked = 0;
 	linked_list = NULL;
     neighlist = NULL;
 	rneigh = rneighsq = NULL;
@@ -268,6 +353,7 @@ Neighbor::Neighbor(PDPS *ps) : Pointers(ps)
 	noffsets_multi = NULL;
 
 	subncxyz = subncxyz_max = 0;
+	slave_flag = 0;
 
 	// pgsize and neigh_threshold_one may be adjustable by user in the future
 	pgsize = 100000;            // size of one page 
@@ -299,6 +385,8 @@ Neighbor::~Neighbor()
 	memory->destroy(head);
 	memory->destroy(linked_list);
 	memory->destroy(x_old);
+	if (slave_flag)
+		memory->destroy(head_slave);
 	
 	delete neighlist;
 	neighlist = NULL;
@@ -325,6 +413,20 @@ Neighbor::~Neighbor()
 	memory->destroy(rneighsq);
 	memory->destroy(rneigh_type);
 	memory->destroy(rneighsq_type);
+
+	cudaFree(devCoffsets);
+	cudaFree(devLinked_list);
+	cudaFree(devHead);
+	cudaFree(devBoxle);
+	cudaFree(devCle);
+	cudaFree(devNc);
+	cudaFree(devSubclo);
+	cudaFree(devSubnc);
+	cudaFree(devBoxhi);
+	cudaFree(devBoxlo);
+	cudaFree(devPairtable);
+	cudaFree(devNumneigh);
+
 }
 
 /* ---------------------------------------------------------------------- */
@@ -431,6 +533,15 @@ void Neighbor::init()
 	}
 	cudaMalloc(&devRneighsq, TYPEMAX * TYPEMAX * sizeof(double));
 	cudaMemcpy(devRneighsq, hostRneighsq, TYPEMAX * TYPEMAX * sizeof(double), cudaMemcpyHostToDevice);
+	int n_master;
+	if (slave_flag)
+		n_master = particle->nlocal - slave_num;
+	else
+		n_master = particle->nlocal;
+	gpuTransfer << < int(n_master + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE >> > (particle->devCoordXold, particle->devCoordX, n_master);
+	gpuTransfer << < int(n_master + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE >> > (particle->devCoordYold, particle->devCoordY, n_master);
+	gpuTransfer << < int(n_master + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE >> > (particle->devCoordZold, particle->devCoordZ, n_master);
+
 }
 
 /* ---------------------------------------------------------------------- 
@@ -493,6 +604,9 @@ void Neighbor::modify_params(int narg, char **arg)
 
 void Neighbor::setup_cells()
 {
+	int nmax = particle->nmax;
+	allocate(nmax);
+
 	int c;
 
 	// ghost_sub lo/hi = bounding box of the local domain extended by parallel->rcghost
@@ -576,6 +690,8 @@ void Neighbor::setup_cells()
 		subncxyz_max = subncxyz;
 		memory->destroy(head);
 		head = memory->create(head, subncxyz_max, "Neighbor: head");
+		if (slave_flag)
+			head_slave = memory->create(head_slave, subncxyz_max, "Neighbor: head_slave");
 	}
 
 	(this->*offsets_create)();
@@ -647,8 +763,10 @@ double Neighbor::cell_distance(int i, int j, int k)
 void Neighbor::build()
 {
 
-	cudaError_t error_t;
-	error_t = cudaMemcpy(hostPairtable, devPairtable, particle->nlocal * 500 * sizeof(int), cudaMemcpyDeviceToHost);
+	/*cudaError_t error_t;
+	error_t = cudaMemcpy(hostPairtable, devPairtable, 1 * sizeof(int), cudaMemcpyDeviceToHost);
+*/
+
 
 	ago = 0;
 	nbuilds++;
@@ -667,19 +785,33 @@ void Neighbor::build()
 	boxhi_old[1] = boxhi[1];
 	boxhi_old[2] = boxhi[2];
 
-	int nmax = particle->nmax;
-	allocate(nmax);
 	
-	// store coordinate at this build
-	double **x = particle->x;
-	for (int i = 0; i < nlocal; i++)
-	for (int j = 0; j < 3; j++) {
-		x_old[i][j] = x[i][j];
+	if (dist_check){
+		// store coordinate at this build
+		double **x = particle->x;
+		for (int i = 0; i < nlocal; i++)
+		for (int j = 0; j < 3; j++) {
+			x_old[i][j] = x[i][j];
+		}
+
+		// GPU data transfer
+		int n_master;
+		if (slave_flag)
+			n_master = particle->nlocal - slave_num;
+		else
+			n_master = particle->nlocal;
+		gpuTransfer << < GRID_SIZE, BLOCK_SIZE >> > (particle->devCoordXold, particle->devCoordX, n_master);
+		gpuTransfer << < GRID_SIZE, BLOCK_SIZE >> > (particle->devCoordYold, particle->devCoordY, n_master);
+		gpuTransfer << < GRID_SIZE, BLOCK_SIZE >> > (particle->devCoordZold, particle->devCoordZ, n_master);
+
 	}
-	
 	build_before = 1;
+	timer->stamp();
 	create_linked_list();
+	timer->stamp(TIME_NEIGHBOR_L);
     create_neigh_list();
+	timer->stamp(TIME_NEIGHBOR_B);
+
 }
 
 /* ---------------------------------------------------------------------- 
@@ -719,28 +851,86 @@ void Neighbor::create_linked_list()
 	double *devCoordY = particle->devCoordY;
 	double *devCoordZ = particle->devCoordZ;
 	double **x = particle->x;
+	int *mask = particle->mask;
 	int nall = particle->nlocal + particle->nghost;
 
 	// Reset the headers to -1
-	for (c = 0; c < subncxyz; c++) {
-		head[c] = -1;
+	if (slave_flag){
+		if (slave_linked){
+			for (c = 0; c < subncxyz; c++) {
+				head[c] = head_slave[c];
+			}
+		}
+		else{
+			for (c = 0; c < subncxyz; c++) {
+				head_slave[c] = -1;
+				head[c] = -1;
+			}
+			for (int i = nall - 1; i >= 0; i--) {
+				if (mask[i] & slave_bit){
+					c = coord2cell(x[i]);
+					if (c < 0 || c >= subncxyz) {
+						printf("c = %f", c);
+						error->all(FLERR, "Invalid cell setup");
+					}
+					// Link to the previoius occupant (or -1 if you are the 1st)
+					linked_list[i] = head_slave[c];
+					// The last one goes to the header
+					head[c] = head_slave[c] = i;
+				}	//  mask[i] & slave_bit
+			}	//  i = nall -1
+			slave_linked = 1;
+		}	// slave_linked
 	}
+	else{
+		for (c = 0; c < subncxyz; c++) {
+			head[c] = -1;
+		}
+	}		//  slave_flag
 
 	// Scan particles to construct headers, head, & linked lists, linked_list
 	// Scan ghost particles first, so they will appear at the end of the neighbor list
 	// Scan in an reverse order, so they will apear in a correct order in the neighbor list 
+	if (slave_flag){
+		for (int i = nall - 1; i >= 0; i--) {
+			if (!(mask[i] & slave_bit)){
+				if (i == 0)
+					i = i;
+				c = coord2cell(x[i]);
+				if (c < 0 || c >= subncxyz) {
+					printf("c = %f", c);
+					error->all(FLERR, "Invalid cell setup");
+				}
+				// Link to the previoius occupant (or -1 if you are the 1st)
+				linked_list[i] = head[c];
+				// The last one goes to the header
+				head[c] = i;
+			}		//  ! (mask[i] & slave_bit[i])
 
-	for (int i = nall-1; i >= 0; i--) {
-		c = coord2cell(x[i]);
-		if (c < 0 || c >= subncxyz ) {	
-			printf("c = %f", c);
-			error->all(FLERR,"Invalid cell setup");
-		}
-		// Link to the previoius occupant (or -1 if you are the 1st)
-		linked_list[i] = head[c];
-		// The last one goes to the header
-		head[c] = i;
+		}	//  int i
+
 	}
+	else{
+		for (int i = nall - 1; i >= 0; i--) {
+			c = coord2cell(x[i]);
+			if (c < 0 || c >= subncxyz) {
+				printf("c = %f", c);
+				error->all(FLERR, "Invalid cell setup");
+			}
+			// Link to the previoius occupant (or -1 if you are the 1st)
+			linked_list[i] = head[c];
+			// The last one goes to the header
+			head[c] = i;
+		}
+	}
+	for (int i = nall - 1; i >= 0; i--){
+		if (linked_list[i] < -1){
+			c = coord2cell(x[i]);
+			i = i;
+		}
+			
+	}
+	
 	cudaError_t error_t;
 	error_t = cudaMemcpy(devLinked_list, linked_list, (particle->nlocal + particle->nghost) * sizeof(int), cudaMemcpyHostToDevice);
 	error_t = cudaMemcpy(devHead, head, subncxyz * sizeof(int), cudaMemcpyHostToDevice);
@@ -832,16 +1022,34 @@ void Neighbor::create_neigh_list()
 	
 
 	int nall = particle->nlocal + particle->nghost;
-	(this->*pair_build)(neighlist);
-	//particle->TransferC2G();
+	//(this->*pair_build)(neighlist);
 	//error_t = cudaMemcpy(hostCoordX, particle->devCoordX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
 	//error_t = cudaMemcpy(hostCoordY, particle->devCoordY, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
 	//error_t = cudaMemcpy(hostCoordZ, particle->devCoordZ, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
-	gpuneighbuild << < (nall + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE >> >(devLinked_list, devHead, devNumneigh, devPairtable, devCoffsets, noffsets,
-		devSubclo, devSubnc, devBoxhi, devBoxlo, devCle, devNc, devRneighsq,
-		particle->nlocal, subncxyz, subncxy, particle->devCoordX, particle->devCoordY, particle->devCoordZ, particle->devType);
-	error_t = cudaMemcpy(hostNumneigh, devNumneigh, particle->nlocal * sizeof(int), cudaMemcpyDeviceToHost);
-	error_t = cudaMemcpy(hostPairtable, devPairtable, particle->nlocal * NEIGHMAX * sizeof(int), cudaMemcpyDeviceToHost);
+	cudaEvent_t start, stop;
+	float time;
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+	if (slave_flag){
+		cudaEventRecord(start, 0);
+		gpuneighbuild << < int(nall + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE >> >(devLinked_list, devHead, devNumneigh, devPairtable, devCoffsets, noffsets,
+			devSubclo, devSubnc, devBoxhi, devBoxlo, devCle, devNc, devRneighsq, particle->devMask,
+			nall, subncxyz, subncxy, particle->devCoordX, particle->devCoordY, particle->devCoordZ, particle->devType, slave_bit);
+
+	
+		/*gpuneighbuild2 << < int(nall + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE >> >(devNumneigh, devPairtable, devRneighsq, rneigh_max, particle->devMask,
+			nall, particle->devCoordX, particle->devCoordY, particle->devCoordZ, particle->devType, slave_bit);*/
+		cudaEventRecord(stop, 0);
+		cudaEventSynchronize(stop);
+		cudaEventElapsedTime(&time, start, stop);
+	}
+	else{
+		gpuneighbuild2 << < int(nall + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE >> >(devNumneigh, devPairtable, devRneighsq, rneigh_max, particle->devMask,
+			nall, particle->devCoordX, particle->devCoordY, particle->devCoordZ, particle->devType, 0);
+	}
+
+	//error_t = cudaMemcpy(hostNumneigh, devNumneigh, particle->nlocal * sizeof(int), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(hostPairtable, devPairtable, particle->nlocal * NEIGHMAX * sizeof(int), cudaMemcpyDeviceToHost);
 	
 	
 }
@@ -919,28 +1127,55 @@ int Neighbor::check_distance()
 	int nlocal = particle->nlocal;
 
 	int flag = 0;
-	for (int i = 0; i < nlocal; i++) {
-		delx = x[i][0] - x_old[i][0];
-		dely = x[i][1] - x_old[i][1];
-		delz = x[i][2] - x_old[i][2];
-		rsq = delx*delx + dely*dely + delz*delz;
-		if (rsq > deltasq) {
-			flag = 1;
-		}
-	}
+	
+	//	flag in GPU
+	int *build_flag;
+	cudaMalloc(&build_flag, sizeof(int));
+	cudaMemcpy(build_flag, &flag, sizeof(int), cudaMemcpyHostToDevice);
 
-	int flagall;
-	MPI_Allreduce(&flag,&flagall,1,MPI_INT,MPI_MAX,mworld);
-	if (flagall && ago == MAX(every,delay)) {
-		ndanger++;
-		ndanger_total++;
-		if (procid == 0) {
-			fprintf(stdout, "Warning: ntimestep = %d ndanger = %d\n", update->ntimestep, ndanger);
-			fflush(stdout);
-		}
-		//error->all(FLERR,"Dangerous build\n");
-	}
-	return flagall;
+	//for (int i = 0; i < nlocal; i++) {
+	//	delx = x[i][0] - x_old[i][0];
+	//	dely = x[i][1] - x_old[i][1];
+	//	delz = x[i][2] - x_old[i][2];
+	//	rsq = delx*delx + dely*dely + delz*delz;
+	//	if (rsq > deltasq) {
+	//		flag = 1;
+	//	}
+	//}
+
+	//int flagall;
+	//MPI_Allreduce(&flag,&flagall,1,MPI_INT,MPI_MAX,mworld);
+	//if (flagall && ago == MAX(every,delay)) {
+	//	ndanger++;
+	//	ndanger_total++;
+	//	if (procid == 0) {
+	//		fprintf(stdout, "Warning: ntimestep = %d ndanger = %d\n", update->ntimestep, ndanger);
+	//		fflush(stdout);
+	//	}
+	//	//error->all(FLERR,"Dangerous build\n");
+	//}
+	
+	int n_master;
+	if (slave_flag)
+		n_master = particle->nlocal - slave_num;
+	else
+		n_master = particle->nlocal;
+	cudaEvent_t start, stop;
+	float time;
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+	cudaEventRecord(start, 0);
+	//cudaError_t error_t;
+	//error_t = cudaMemcpy(neighbor->hostCoordX, particle->devCoordXold, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(neighbor->hostCoordZ, particle->devCoordX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	gpucheck_distance << < int (n_master + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE >> > (particle->devCoordX, particle->devCoordY, particle->devCoordZ,
+		particle->devCoordXold, particle->devCoordYold, particle->devCoordZold,
+		n_master, deltasq, build_flag);
+	cudaMemcpy(&flag, build_flag, sizeof(int), cudaMemcpyDeviceToHost);
+	cudaEventRecord(stop, 0);
+	cudaEventSynchronize(stop);
+	cudaEventElapsedTime(&time, start, stop);
+	return flag;
 }
 
 /* ---------------------------------------------------------------------- 
@@ -979,4 +1214,17 @@ void Neighbor::debug()
 	}
 	fprintf(file1,"\n");
 	fclose(file1);
+}
+
+/* ----------------------------------------------------------------------
+		set slaves particles which have no neighbor list 
+---------------------------------------------------------------------- */
+
+void Neighbor::setslave(int narg, char **arg)
+{
+	if (narg != 1) error->all(FLERR, "Illegal neighbor command");
+	int slaveid = group->find_group(arg[0]);
+	slave_bit = group->bitmask[slaveid];
+	slave_flag = 1;
+	slave_num = group->gparticles[slaveid];
 }

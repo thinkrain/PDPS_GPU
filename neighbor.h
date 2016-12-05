@@ -73,6 +73,15 @@ public:
 
 	void debug();
 
+	int slave_flag;						//	record slave particles and don't compute their 
+	int slave_bit;
+	int slave_linked;
+	int *head_slave;
+	int slave_num;
+
+	// set slave particles
+	void setslave(int, char **);
+
 	// GPU parameters
 	double *devRneighsq;
 	int *devNumneigh;

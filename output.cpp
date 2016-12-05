@@ -21,7 +21,7 @@
 #include "style_dump.h"
 #include "thermo.h"
 #include "update.h"
-
+#include "timer.h"
 using namespace PDPS_NS;
 
 #define DELTA 2
@@ -182,6 +182,7 @@ void Output::write()
 		if (dump[i]->nevery != 0) {
 			if ((ntimestep % dump[i]->nevery == 0))   // check frequency
 				dump[i]->write();
+				
 		}
 	}
 

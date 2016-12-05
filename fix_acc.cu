@@ -16,7 +16,7 @@
 #include "fix_acc.h"
 #include "particle.h"
 #include "region.h"
-
+#include "timer.h"
 #include "update.h"
 #include "neighbor.h"
 
@@ -34,6 +34,7 @@ __global__ void gpuacc(double *devCoordX, double *devCoordY, double *devCoordZ, 
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 	__shared__ double acc[3];
 	__shared__ double mass[10];
+	double fx, fy, fz;
 	acc[0] = xacc;
 	acc[1] = yacc;
 	acc[2] = zacc;
@@ -43,9 +44,12 @@ __global__ void gpuacc(double *devCoordX, double *devCoordY, double *devCoordZ, 
 	for (i = i; i < nlocal; i += blockDim.x * gridDim.x){
 		if (devMask[i] & groupbit){
 			int itype = devType[i];
-			devForceX[i] += mass[itype] * acc[0];
-			devForceY[i] += mass[itype] * acc[1];
-			devForceZ[i] += mass[itype] * acc[2];
+			fx = mass[itype] * acc[0];
+			fy = mass[itype] * acc[1];
+			fz = mass[itype] * acc[2];
+			devForceX[i] += fx;  
+			devForceY[i] += fy;
+			devForceZ[i] += fz;
 		}
 
 	}
@@ -149,16 +153,24 @@ void FixAcc::post_force()
 	//		f[i][2] += massone*zacc;
 	//	}
 	//}
-	cudaError_t error_t;
-	error_t = cudaMemcpy(neighbor->hostForceX, particle->devForceX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
-	error_t = cudaMemcpy(neighbor->hostForceY, particle->devForceY, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
-	error_t = cudaMemcpy(neighbor->hostForceZ, particle->devForceZ, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
-
-	gpuacc << < GRID_SIZE, BLOCK_SIZE >> >(particle->devCoordX, particle->devCoordY, particle->devCoordZ, particle->devMask, groupbit,
+	//cudaError_t error_t;
+	//error_t = cudaMemcpy(neighbor->hostForceX, particle->devForceX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(neighbor->hostForceY, particle->devForceY, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(neighbor->hostForceZ, particle->devForceZ, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	cudaEvent_t start, stop;
+	float time;
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+	cudaEventRecord(start, 0);
+	gpuacc << < int(nlocal + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE >> >(particle->devCoordX, particle->devCoordY, particle->devCoordZ, particle->devMask, groupbit,
 		nlocal, particle->devForceX, particle->devForceY, particle->devForceZ,
 		xacc, yacc, zacc, particle->devMass, particle->devType);
-	error_t = cudaMemcpy(neighbor->hostForceX, particle->devForceX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
-	error_t = cudaMemcpy(neighbor->hostForceY, particle->devForceY, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
-	error_t = cudaMemcpy(neighbor->hostForceZ, particle->devForceZ, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	cudaEventRecord(stop, 0);
+	cudaEventSynchronize(stop);
+	cudaEventElapsedTime(&time, start, stop);
+	time = time;
+	//error_t = cudaMemcpy(neighbor->hostForceX, particle->devForceX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(neighbor->hostForceY, particle->devForceY, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(neighbor->hostForceZ, particle->devForceZ, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
 	//particle->TransferG2C();
 }

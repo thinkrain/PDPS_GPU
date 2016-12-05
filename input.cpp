@@ -221,6 +221,7 @@ int Input::execute_command()
 	else if (!strcmp(command, "multi_run")) multi_run();
 	else if (!strcmp(command, "neigh_modify")) neigh_modify();
 	else if (!strcmp(command, "neighbor")) neighbor_command();
+	else if (!strcmp(command, "neighbor_slave")) neighbor_setslave();
 	else if (!strcmp(command, "pair_coeff")) pair_coeff();
 	else if (!strcmp(command, "pair_style")) pair_style();
 	else if (!strcmp(command, "particle_style")) particle_style();
@@ -549,4 +550,11 @@ void Input::velocity()
 	if (narg < 5) error->all(FLERR, "Illegal velocity command");
 	Velocity velocity(ps);
 	velocity.command(narg, arg);
+}
+
+/* ---------------------------------------------------------------------- */
+
+void Input::neighbor_setslave()
+{
+	neighbor->setslave(narg, arg);
 }

@@ -88,6 +88,7 @@ private:
 	void uncompute();
 	void undump();
 	void unfix();
+	void neighbor_setslave();
   
 };
 

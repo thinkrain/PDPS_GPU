@@ -106,6 +106,9 @@ void ParticleTypeSph::grow(int n)
 	cudaMalloc(&particle->devCoordX, nmax  * sizeof(double));
 	cudaMalloc(&particle->devCoordY, nmax  * sizeof(double));
 	cudaMalloc(&particle->devCoordZ, nmax  * sizeof(double));
+	cudaMalloc(&particle->devCoordXold, nmax  * sizeof(double));
+	cudaMalloc(&particle->devCoordYold, nmax  * sizeof(double));
+	cudaMalloc(&particle->devCoordZold, nmax  * sizeof(double));
 	cudaMalloc(&particle->devVeloX, nmax  * sizeof(double));
 	cudaMalloc(&particle->devVeloY, nmax * sizeof(double));
 	cudaMalloc(&particle->devVeloZ, nmax * sizeof(double));

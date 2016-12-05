@@ -123,12 +123,13 @@ void V_Verlet::run(int n)
 		modify->initial_integrate();
 		if (n_post_integrate) modify->post_integrate();
 		timer->stamp(TIME_UPDATE);
-
-		particle->TransferG2C();
 		// build neighbor
 		nflag = neighbor->decide();
+		timer->stamp(TIME_NEIGHBOR_D);
 		if (nflag == 1) {
-		
+			timer->stamp();
+			particle->TransferG2C();
+			timer->stamp(TIME_G2C);
 			domain->pbc();
 			if (domain->box_change) {
 				timer->stamp();
@@ -143,8 +144,9 @@ void V_Verlet::run(int n)
 			parallel->borders();
 			timer->stamp(TIME_COMM);
 			neighbor->build();
+			timer->stamp(TIME_NEIGHBOR_B);
 			//neighbor->debug();
-			timer->stamp(TIME_NEIGHBOR);
+			//timer->stamp(TIME_NEIGHBOR);
 		}
 		else {
 			timer->stamp();
@@ -152,7 +154,9 @@ void V_Verlet::run(int n)
 			timer->stamp(TIME_COMM);
 		}
 		// force computation
+		timer->stamp();
 		force->clear();
+		timer->stamp(TIME_SETUP);
 		if (n_pre_force) modify->pre_force();
 
 		force->compute(eflag, vflag);
@@ -172,7 +176,6 @@ void V_Verlet::run(int n)
 		timer->stamp(TIME_ANALYZE);
 
 		// output 
-		
 		timer->stamp();
 		output->write();
 		timer->stamp(TIME_OUTPUT);

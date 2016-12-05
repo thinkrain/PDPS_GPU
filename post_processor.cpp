@@ -60,8 +60,13 @@ void PostProcessor::finalize()
 		output->print(str);
 	}
 
-	
-	sprintf(str,"TIME spent on NEIGHBOR: %g\n",timer->time_all[TIME_NEIGHBOR]);
+	sprintf(str, "TIME spent on NEIGHBOR_D: %g\n", timer->time_all[TIME_NEIGHBOR_D]);
+	output->print(str);
+
+	sprintf(str,"TIME spent on NEIGHBOR_L: %g\n",timer->time_all[TIME_NEIGHBOR_L]);
+	output->print(str);
+
+	sprintf(str, "TIME spent on NEIGHBOR_B: %g\n", timer->time_all[TIME_NEIGHBOR_B]);
 	output->print(str);
 
 	sprintf(str,"TIME spent on COMM: %g\n",timer->time_all[TIME_COMM]);
@@ -77,6 +82,9 @@ void PostProcessor::finalize()
 	output->print(str);
 
 	sprintf(str,"TIME spent on OUTPUT: %g\n",timer->time_all[TIME_OUTPUT]);
+	output->print(str);
+
+	sprintf(str, "TIME spent on G2C: %g\n", timer->time_all[TIME_G2C]);
 	output->print(str);
 
 	output->print("\n");

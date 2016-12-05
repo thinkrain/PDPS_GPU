@@ -24,6 +24,7 @@
 #include "update.h"
 #include "group.h"
 #include "mpi.h"
+#include "timer.h"
 
 #include "pdps_cuda.h"
 #include "cuda_engine.h"
@@ -44,8 +45,8 @@ __global__ void gpuComputesphforce(double *devCoordX, double *devCoordY, double 
 	double *devVisc, double *devSoundspeed,double *devForceX, double *devForceY, double *devForceZ){
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 
-	float wf, xtemp, ytemp, ztemp, rsq, delx, dely, delz, q, tmp, fi, fj, irho, jrho, rij_inv, delVdotDelR;
-	float vxtmp, vytmp, vztmp, mu, fviscx, fviscy, fviscz, wfd, fpair, imass, jmass;
+	double wf, xtemp, ytemp, ztemp, rsq, delx, dely, delz, q, tmp, fi, fj, irho, jrho, rij_inv, delVdotDelR;
+	double vxtmp, vytmp, vztmp, mu, fviscx, fviscy, fviscz, wfd, fpair, imass, jmass;
 	unsigned int j, jj, itype, jtype, jnum;
 	__shared__ double mass[TYPEMAX];
 	__shared__ double rho0[TYPEMAX];
@@ -388,23 +389,33 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
  //   }
 
  // }
-  cudaError_t error_t;
+ cudaError_t error_t;
   //force->clear();
   /*error_t = cudaMemcpy(neighbor->hostForceX, particle->devForceX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
   error_t = cudaMemcpy(neighbor->hostForceZ, particle->devForceZ, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
   error_t = cudaMemcpy(particle->ptrHostRho, particle->devRho, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);*/
-  error_t = cudaMemcpy(neighbor->hostForceX, particle->devForceX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
-  error_t = cudaMemcpy(neighbor->hostForceY, particle->devForceY, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
-  error_t = cudaMemcpy(neighbor->hostForceZ, particle->devForceZ, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
-  gpuComputesphforce << < GRID_SIZE, BLOCK_SIZE >> >(particle->devCoordX, particle->devCoordY, particle->devCoordZ,
+  //error_t = cudaMemcpy(neighbor->hostForceX, particle->devForceX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+  //error_t = cudaMemcpy(neighbor->hostForceY, particle->devForceY, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+  //error_t = cudaMemcpy(neighbor->hostForceZ, particle->devForceZ, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	 cudaEvent_t start, stop;
+	 float time;
+	 cudaEventCreate(&start);
+	 cudaEventCreate(&stop);
+	 cudaEventRecord(start, 0);
+
+  gpuComputesphforce << < int(nlocal + BLOCK_SIZE - 1)/ BLOCK_SIZE, BLOCK_SIZE >> >(particle->devCoordX, particle->devCoordY, particle->devCoordZ,
 	  neighbor->devPairtable, neighbor->devNumneigh, particle->devRho, particle->devMass, particle->devType,
 	  particle->devMask, h, nlocal, a3D, devSetflag, devCutsq, devRho0, devB, visc_flag,
 	  particle->devVestX, particle->devVestY, particle->devVestZ, devVisc, devSoundspeed,
 	  particle->devForceX, particle->devForceY, particle->devForceZ);
-  error_t = cudaMemcpy(neighbor->hostForceX, particle->devForceX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+
+	  cudaEventRecord(stop, 0);
+	  cudaEventSynchronize(stop);
+	  cudaEventElapsedTime(&time, start, stop);
+ /* error_t = cudaMemcpy(neighbor->hostForceX, particle->devForceX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
   error_t = cudaMemcpy(neighbor->hostForceY, particle->devForceY, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
-  error_t = cudaMemcpy(neighbor->hostForceZ, particle->devForceZ, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
-  error_t = cudaMemcpy(hostCutsq, devCutsq, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+  error_t = cudaMemcpy(neighbor->hostForceZ, particle->devForceZ, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);*/
+  //error_t = cudaMemcpy(hostCutsq, devCutsq, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
  /* error_t = cudaMemcpy(neighbor->hostNumneigh, neighbor->devNumneigh, particle->nlocal * sizeof(int), cudaMemcpyDeviceToHost);
   error_t = cudaMemcpy(neighbor->hostPairtable, neighbor->devPairtable, particle->nlocal * NEIGHMAX * sizeof(int), cudaMemcpyDeviceToHost);
   error_t = cudaMemcpy(hostSetflag, devSetflag, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);

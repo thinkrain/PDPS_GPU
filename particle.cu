@@ -23,6 +23,7 @@
 #include "phy_const.h"
 #include "random_park.h"
 #include "style_particle.h"
+#include "timer.h"
 
 #include "pdps_cuda.h"
 #include "cuda_engine.h"
@@ -174,6 +175,9 @@ Particle::Particle(PDPS *ps) : Pointers(ps)
 	devCoordX = NULL;
 	devCoordY = NULL;
 	devCoordZ = NULL;
+	devCoordXold = NULL;
+	devCoordYold = NULL;
+	devCoordZold = NULL;
 	devVeloX = NULL;
 	devVeloY = NULL;
 	devVeloZ = NULL;
@@ -1134,32 +1138,27 @@ __global__ void add(int *a, int *b, int *c) {
 /* ---------------------------------------------------------------------- */
 void Particle::TransferG2C(){
 
-	enum cudaLimit 	limit;
-	size_t *memory, *free, *total;
-	memory = (size_t *)malloc(sizeof(size_t));
-	free = (size_t *)malloc(sizeof(size_t));
-	total = (size_t *)malloc(sizeof(size_t));
-	int *device_num;
-	device_num = (int *)malloc(sizeof(int));
-	cudaError_t cudaStatus = cudaGetDevice(device_num);
-	cudaStatus = cudaMemGetInfo(free, total);
-	//cudaStatus = cudaDeviceGetLimit(memory, limit);
+	//enum cudaLimit 	limit;
+	//size_t *memory, *free, *total;
+	//memory = (size_t *)malloc(sizeof(size_t));
+	//free = (size_t *)malloc(sizeof(size_t));
+	//total = (size_t *)malloc(sizeof(size_t));
+	//int *device_num;
+	//device_num = (int *)malloc(sizeof(int));
+	//cudaError_t cudaStatus = cudaGetDevice(device_num);
+	//cudaStatus = cudaMemGetInfo(free, total);
+	////cudaStatus = cudaDeviceGetLimit(memory, limit);
+	cudaEvent_t start, stop;
+	float time;
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+	cudaEventRecord(start, 0);
 
 	int nlocal = particle->nlocal;
 	if (nlocal == 0)
 		return;
 
 	const int BLK = 512;
-
-
-	double *test, *devtest;
-	test = (double *)malloc(4 * sizeof(double));
-	cudaMalloc((void **)&devtest, 4 * sizeof(double));
-	//gputest << < 4, 4 >> > (devCoordX);
-	//cudaMemcpy(test, devCoordX, 10 * sizeof(double), cudaMemcpyDeviceToHost);
-	gputest << < 1, 4 >> > (devtest);
-
-	cudaMemcpy(test, devtest, 4 * sizeof(double), cudaMemcpyDeviceToHost);
 
 	//	Therr are maximum 16 stream to run the code transfer concurrently
 	int nStream = cudaEngine->StreamPool.size();
@@ -1222,5 +1221,8 @@ void Particle::TransferG2C(){
 	//	Make sure they all stop before end the function
 	for (int i = 0; i < Events.size(); i++)
 		cudaStreamWaitEvent(StreamPool[0], Events[i], 0);
-
+	cudaEventRecord(stop, 0);
+	cudaEventSynchronize(stop);
+	cudaEventElapsedTime(&time, start, stop);
+	time = time;
 }
