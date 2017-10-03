@@ -144,15 +144,15 @@ void Force::clear()
 	//for (int j = 0; j < 6; j++) {
 	//	pair[i]->virial[j] = 0.0;
 	//}
-	//cudaEvent_t start, stop;
-	//float time;
-	//cudaEventCreate(&start);
-	//cudaEventCreate(&stop);
-	//cudaEventRecord(start, 0);
-	gpuforce_clear << < int(nall + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE >> >(nall, particle->devForceX, particle->devForceY, particle->devForceZ);
-	//cudaEventRecord(stop, 0);
-	//cudaEventSynchronize(stop);
-	//cudaEventElapsedTime(&time, start, stop);
+	cudaEvent_t start, stop;
+	float time;
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+	cudaEventRecord(start, 0);
+	gpuforce_clear << < int(nall + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> >(nall, particle->devForceX, particle->devForceY, particle->devForceZ);
+	cudaEventRecord(stop, 0);
+	cudaEventSynchronize(stop);
+	cudaEventElapsedTime(&time, start, stop);
 
 }
 

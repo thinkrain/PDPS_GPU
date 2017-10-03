@@ -15,10 +15,10 @@
 
 namespace PDPS_NS {
 
-#define BLOCK_SIZE 320
+#define  BLOCK_SIZE 640
 #define GRID_SIZE 16
-#define TYPEMAX 10
-#define NEIGHMAX 500
+#define TYPEMAX 5
+#define NEIGHMAX 200
 
 class PDPS {
  public:

@@ -538,9 +538,9 @@ void Neighbor::init()
 		n_master = particle->nlocal - slave_num;
 	else
 		n_master = particle->nlocal;
-	gpuTransfer << < int(n_master + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE >> > (particle->devCoordXold, particle->devCoordX, n_master);
-	gpuTransfer << < int(n_master + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE >> > (particle->devCoordYold, particle->devCoordY, n_master);
-	gpuTransfer << < int(n_master + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE >> > (particle->devCoordZold, particle->devCoordZ, n_master);
+	gpuTransfer << < int(n_master + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> > (particle->devCoordXold, particle->devCoordX, n_master);
+	gpuTransfer << < int(n_master + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> > (particle->devCoordYold, particle->devCoordY, n_master);
+	gpuTransfer << < int(n_master + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> > (particle->devCoordZold, particle->devCoordZ, n_master);
 
 }
 
@@ -800,9 +800,9 @@ void Neighbor::build()
 			n_master = particle->nlocal - slave_num;
 		else
 			n_master = particle->nlocal;
-		gpuTransfer << < GRID_SIZE, BLOCK_SIZE >> > (particle->devCoordXold, particle->devCoordX, n_master);
-		gpuTransfer << < GRID_SIZE, BLOCK_SIZE >> > (particle->devCoordYold, particle->devCoordY, n_master);
-		gpuTransfer << < GRID_SIZE, BLOCK_SIZE >> > (particle->devCoordZold, particle->devCoordZ, n_master);
+		gpuTransfer << < int(n_master + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> > (particle->devCoordXold, particle->devCoordX, n_master);
+		gpuTransfer << < int(n_master + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> > (particle->devCoordYold, particle->devCoordY, n_master);
+		gpuTransfer << < int(n_master + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> > (particle->devCoordZold, particle->devCoordZ, n_master);
 
 	}
 	build_before = 1;
@@ -1032,7 +1032,7 @@ void Neighbor::create_neigh_list()
 	cudaEventCreate(&stop);
 	if (slave_flag){
 		cudaEventRecord(start, 0);
-		gpuneighbuild << < int(nall + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE >> >(devLinked_list, devHead, devNumneigh, devPairtable, devCoffsets, noffsets,
+		gpuneighbuild << < int(nall + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> >(devLinked_list, devHead, devNumneigh, devPairtable, devCoffsets, noffsets,
 			devSubclo, devSubnc, devBoxhi, devBoxlo, devCle, devNc, devRneighsq, particle->devMask,
 			nall, subncxyz, subncxy, particle->devCoordX, particle->devCoordY, particle->devCoordZ, particle->devType, slave_bit);
 
@@ -1044,7 +1044,7 @@ void Neighbor::create_neigh_list()
 		cudaEventElapsedTime(&time, start, stop);
 	}
 	else{
-		gpuneighbuild2 << < int(nall + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE >> >(devNumneigh, devPairtable, devRneighsq, rneigh_max, particle->devMask,
+		gpuneighbuild2 << < int(nall + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> >(devNumneigh, devPairtable, devRneighsq, rneigh_max, particle->devMask,
 			nall, particle->devCoordX, particle->devCoordY, particle->devCoordZ, particle->devType, 0);
 	}
 
@@ -1142,7 +1142,7 @@ int Neighbor::check_distance()
 	//		flag = 1;
 	//	}
 	//}
-
+	
 	//int flagall;
 	//MPI_Allreduce(&flag,&flagall,1,MPI_INT,MPI_MAX,mworld);
 	//if (flagall && ago == MAX(every,delay)) {
@@ -1160,21 +1160,21 @@ int Neighbor::check_distance()
 		n_master = particle->nlocal - slave_num;
 	else
 		n_master = particle->nlocal;
-	cudaEvent_t start, stop;
-	float time;
-	cudaEventCreate(&start);
-	cudaEventCreate(&stop);
-	cudaEventRecord(start, 0);
+	//cudaEvent_t start, stop;
+	//float time;
+	//cudaEventCreate(&start);
+	//cudaEventCreate(&stop);
+	//cudaEventRecord(start, 0);
 	//cudaError_t error_t;
 	//error_t = cudaMemcpy(neighbor->hostCoordX, particle->devCoordXold, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
 	//error_t = cudaMemcpy(neighbor->hostCoordZ, particle->devCoordX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
-	gpucheck_distance << < int (n_master + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE >> > (particle->devCoordX, particle->devCoordY, particle->devCoordZ,
+	gpucheck_distance << < int (n_master + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> > (particle->devCoordX, particle->devCoordY, particle->devCoordZ,
 		particle->devCoordXold, particle->devCoordYold, particle->devCoordZold,
 		n_master, deltasq, build_flag);
 	cudaMemcpy(&flag, build_flag, sizeof(int), cudaMemcpyDeviceToHost);
-	cudaEventRecord(stop, 0);
-	cudaEventSynchronize(stop);
-	cudaEventElapsedTime(&time, start, stop);
+	//cudaEventRecord(stop, 0);
+	//cudaEventSynchronize(stop);
+	//cudaEventElapsedTime(&time, start, stop);
 	return flag;
 }
 

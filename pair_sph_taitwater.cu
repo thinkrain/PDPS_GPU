@@ -45,16 +45,16 @@ __global__ void gpuComputesphforce(double *devCoordX, double *devCoordY, double 
 	double *devVisc, double *devSoundspeed,double *devForceX, double *devForceY, double *devForceZ){
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 
-	double wf, xtemp, ytemp, ztemp, rsq, delx, dely, delz, q, tmp, fi, fj, irho, jrho, rij_inv, delVdotDelR;
-	double vxtmp, vytmp, vztmp, mu, fviscx, fviscy, fviscz, wfd, fpair, imass, jmass;
+	float wf, xtemp, ytemp, ztemp, rsq, delx, dely, delz, q, tmp, fi, fj, irho, jrho, rij_inv, delVdotDelR;
+	float vxtmp, vytmp, vztmp, mu, fviscx, fviscy, fviscz, wfd, fpair, imass, jmass;
 	unsigned int j, jj, itype, jtype, jnum;
-	__shared__ double mass[TYPEMAX];
-	__shared__ double rho0[TYPEMAX];
-	__shared__ double B[TYPEMAX];
+	__shared__ float mass[TYPEMAX];
+	__shared__ float rho0[TYPEMAX];
+	__shared__ float B[TYPEMAX];
 	__shared__ int setflag[TYPEMAX * TYPEMAX];
-	__shared__ double cutsq[TYPEMAX * TYPEMAX];
-	__shared__ double viscosity[TYPEMAX * TYPEMAX];
-	__shared__ double soundspeed[TYPEMAX];
+	__shared__ float cutsq[TYPEMAX * TYPEMAX];
+	__shared__ float viscosity[TYPEMAX * TYPEMAX];
+	__shared__ float soundspeed[TYPEMAX];
 	for (int tid = 0; tid < TYPEMAX; tid++){
 		mass[tid] = devMass[tid];
 		rho0[tid] = devRho0[tid];
@@ -118,9 +118,9 @@ __global__ void gpuComputesphforce(double *devCoordX, double *devCoordY, double 
 									mu = h * delVdotDelR / (rsq + 0.01 * h * h);
 									fviscx = fviscy = fviscz = -viscosity[itype * TYPEMAX + jtype] * (soundspeed[itype]
 										+ soundspeed[jtype]) * mu / (irho + jrho);
-									fviscx *= -imass * jmass * wfd * delx / rij_inv;
-									fviscy *= -imass * jmass * wfd * dely / rij_inv;
-									fviscz *= -imass * jmass * wfd * delz / rij_inv;
+									fviscx *= -imass * jmass * wfd * delx * rij_inv;
+									fviscy *= -imass * jmass * wfd * dely * rij_inv;
+									fviscz *= -imass * jmass * wfd * delz * rij_inv;
 
 								}
 								else {
@@ -403,7 +403,7 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
 	 cudaEventCreate(&stop);
 	 cudaEventRecord(start, 0);
 
-  gpuComputesphforce << < int(nlocal + BLOCK_SIZE - 1)/ BLOCK_SIZE, BLOCK_SIZE >> >(particle->devCoordX, particle->devCoordY, particle->devCoordZ,
+	 gpuComputesphforce << < int(nlocal + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> >(particle->devCoordX, particle->devCoordY, particle->devCoordZ,
 	  neighbor->devPairtable, neighbor->devNumneigh, particle->devRho, particle->devMass, particle->devType,
 	  particle->devMask, h, nlocal, a3D, devSetflag, devCutsq, devRho0, devB, visc_flag,
 	  particle->devVestX, particle->devVestY, particle->devVestZ, devVisc, devSoundspeed,

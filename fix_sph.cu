@@ -149,7 +149,7 @@ void FixSPH::initial_integrate()
 	//error_t = cudaMemcpy(neighbor->hostCoordX, particle->devCoordX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
 	//error_t = cudaMemcpy(neighbor->hostCoordY, particle->devCoordY, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
 	//error_t = cudaMemcpy(neighbor->hostCoordZ, particle->devCoordZ, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
-	gpufixsph_init << < int(nlocal + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE >> >(particle->devCoordX, particle->devCoordY, particle->devCoordZ, particle->devMask, groupbit,
+	gpufixsph_init << < int(nlocal + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> >(particle->devCoordX, particle->devCoordY, particle->devCoordZ, particle->devMask, groupbit,
 		nlocal, particle->devForceX, particle->devForceY, particle->devForceZ, dtf, dtv, particle->devVestX, particle->devVestY, particle->devVestZ, 
 		particle->devVeloX, particle->devVeloY, particle->devVeloZ, particle->devMass, particle->devType);
 	//error_t = cudaMemcpy(neighbor->hostCoordX, particle->devCoordX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
@@ -201,7 +201,7 @@ void FixSPH::final_integrate()
 	error_t = cudaMemcpy(neighbor->hostForceX, particle->devForceX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
 	error_t = cudaMemcpy(neighbor->hostForceY, particle->devForceY, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
 	error_t = cudaMemcpy(neighbor->hostForceZ, particle->devForceZ, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);*/
-	gpufixsph_final << < int(nlocal + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE >> >(particle->devMask, groupbit,
+	gpufixsph_final << < int(nlocal + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> >(particle->devMask, groupbit,
 		nlocal, particle->devForceX, particle->devForceY, particle->devForceZ, dtf,
 		particle->devVeloX, particle->devVeloY, particle->devVeloZ, particle->devMass, particle->devType);
 
