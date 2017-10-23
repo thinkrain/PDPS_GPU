@@ -86,6 +86,7 @@ public:
 	double *devRneighsq;
 	int *devNumneigh;
 	int *devPairtable;
+	
 
 	//	GPU temp parameters for debug
 	double *hostCoordX;

@@ -38,6 +38,9 @@ protected:
 	double **kt, **Ct;            // tangential force
 	double **mu;                  // friction coefficient
 	double e;                     // restitution coefficient
+	//GPU parameters
+	double *devKn,*devKt,*devCn,*devCt,*devMu;
+	double *hostKn,*hostKt,*hostCn,*hostCt,*hostMu;
 
 	int tbsize;                   // page size for the pair_map in the pair_list, 
 	                              // Could be the same as the one in the neighbor class
