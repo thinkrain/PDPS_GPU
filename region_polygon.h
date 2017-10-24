@@ -39,10 +39,12 @@ public:
 
 	void plane3D_map2_plane2D(double **);
 	
+
+
 private:
 	FILE *test;           // debug purpose
 
-	double a, b, c, d;                                // ax + by + cz = d
+
 	double inv_abc;                                   // 1.0 / sqrt(a*a + b*b + c*c)
 
 	int nps_initial;

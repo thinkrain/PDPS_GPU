@@ -82,6 +82,7 @@ public:
 	//------------- plain -----------------
 	
 	// polygon
+	double a, b, c, d;                                // ax + by + cz = d
 	double area;
 	double **rot_coords;                                              // rotated coordinates after mapping the 3D plane into 2D plane (x-y)            
 	double rot[3][3], inv_rot[3][3];                                  // rotation matrix and its inverse

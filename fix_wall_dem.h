@@ -50,6 +50,14 @@ private:
 	//double **vel_wall;        // velocity of the wall
 	//double **omega;           // rotation speed of the wall
 
+	// GPU parameters
+	int *devWallContactFlag;
+	double *devWallDrijtx, *devWallDrijty, *devWallDrijtz;
+	int *devWall;
+	double *devCoords0;
+	int *devWall_rid; 
+	int *devWall_flag;
+
 	class PairList *pair_list;
 	int tbsize;
 
