@@ -197,6 +197,7 @@ Particle::Particle(PDPS *ps) : Pointers(ps)
 	devDensity = NULL;
 	devPoro = NULL;
 	devVolume = NULL;
+	devHlocal = NULL;
 
 	devHostCoord = NULL;
 	devHostVelo = NULL;
@@ -212,6 +213,7 @@ Particle::Particle(PDPS *ps) : Pointers(ps)
 	devHostDensity = NULL;
 	devHostPoro = NULL;
 	devHostVolume = NULL;
+	devHostHlocal = NULL;
 
 	ptrHostCoord = NULL;
 	ptrHostVelo = NULL;
@@ -227,7 +229,7 @@ Particle::Particle(PDPS *ps) : Pointers(ps)
 	ptrHostDensity = NULL;
 	ptrHostPoro = NULL;
 	ptrHostVolume = NULL;
-		
+	ptrHostHlocal = NULL;
 
 }
 
@@ -1013,6 +1015,7 @@ void Particle::PinHostArray(){
 	if (radius) ptrHostRadius = cudaEngine->PinHost(devHostRadius, particle->radius, particle->nmax * sizeof(double));
 	if (poro) ptrHostPoro = cudaEngine->PinHost(devHostPoro, particle->poro, particle->nmax * sizeof(double));
 	if (volume) ptrHostVolume = cudaEngine->PinHost(devHostVolume, particle->volume, particle->nmax * sizeof(double));
+	if (hlocal) ptrHostHlocal = cudaEngine->PinHost(devHostHlocal, particle->hlocal, particle->nmax * sizeof(double));
 
 }
 
@@ -1033,6 +1036,7 @@ void Particle::UnpinHostArray(){
 	if (ptrHostDensity) cudaEngine->UnpinHost(particle->density, ptrHostDensity, devHostDensity);
 	if (ptrHostPoro) cudaEngine->UnpinHost(particle->poro, ptrHostPoro, devHostPoro);
 	if (ptrHostVolume) cudaEngine->UnpinHost(particle->volume, ptrHostVolume, devHostVolume);
+	if (ptrHostHlocal) cudaEngine->UnpinHost(particle->hlocal, ptrHostHlocal, devHostHlocal);
 
 }
 
@@ -1111,9 +1115,11 @@ void Particle::TransferC2G(){
 	cudaMemcpyAsync(devHostDensity, ptrHostDensity, nlocal * sizeof(double), cudaMemcpyHostToDevice, Stream);
 	cudaMemcpyAsync(devHostPoro, ptrHostPoro, nlocal * sizeof(double), cudaMemcpyHostToDevice, Stream);
 	cudaMemcpyAsync(devHostVolume, ptrHostVolume, nlocal * sizeof(double), cudaMemcpyHostToDevice, Stream);
+	cudaMemcpyAsync(devHostHlocal, ptrHostHlocal, nlocal * sizeof(double), cudaMemcpyHostToDevice, Stream);
 	gpuCopy << < int(nlocal + BLK - 1) / BLK, BLK, 0, Stream >> > (devDensity, devHostDensity, nlocal);
 	gpuCopy << < int(nlocal + BLK - 1) / BLK, BLK, 0, Stream >> > (devPoro, devHostPoro, nlocal);
 	gpuCopy << < int(nlocal + BLK - 1) / BLK, BLK, 0, Stream >> > (devVolume, devHostVolume, nlocal);
+	gpuCopy << < int(nlocal + BLK - 1) / BLK, BLK, 0, Stream >> > (devHlocal, devHostHlocal, nlocal);
 	Events.push_back(cudaEngine->Event("D_C2G_PREV"));
 	cudaEventRecord(Events.back(), Stream);
 
@@ -1208,6 +1214,7 @@ void Particle::TransferG2C(){
 	cudaMemcpyAsync(ptrHostDensity, devDensity, nlocal * sizeof(double), cudaMemcpyDeviceToHost, Stream);
 	cudaMemcpyAsync(ptrHostPoro, devPoro, nlocal * sizeof(double), cudaMemcpyDeviceToHost, Stream);
 	cudaMemcpyAsync(ptrHostVolume, devVolume, nlocal * sizeof(double), cudaMemcpyDeviceToHost, Stream);
+	cudaMemcpyAsync(ptrHostHlocal, devHlocal, nlocal * sizeof(double), cudaMemcpyDeviceToHost, Stream);
 	Events.push_back(cudaEngine->Event("D_G2C_PREV"));
 	cudaEventRecord(Events.back(), Stream);
 

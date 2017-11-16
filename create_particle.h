@@ -1,11 +1,11 @@
 /* ----------------------------------------------------------------------
-   PDPS - Particle Dynamics Parallel Simulator
-   
+PDPS - Particle Dynamics Parallel Simulator
 
-   Copyright (2012) reserved by Lingqi Yang. 
-   Email: ly2282@columbia.edu
 
-   See the README file in the top-level PDPS directory.
+Copyright (2012) reserved by Lingqi Yang.
+Email: ly2282@columbia.edu
+
+See the README file in the top-level PDPS directory.
 ------------------------------------------------------------------------- */
 
 #ifndef PS_Create_Particle_H
@@ -15,48 +15,53 @@
 
 namespace PDPS_NS {
 
-class CreateParticle : protected Pointers {
-public:
-	int nparticles_previous, nparticles_now;     // number of particles created in one command
-	int npx, npy, npz;                           // number of particle along each edge of the corresponding region
-	double xlo, xhi, ylo, yhi, zlo, zhi;         // the lower bound of the coresponding region
-	double xle, yle, zle;
-	double extent_xlo, extent_xhi, extent_ylo, extent_yhi, extent_zlo, extent_zhi;
-	double extent_xle, extent_yle, extent_zle;
-	double dx, dy, dz;                           // lattice spacing
-	double sublo[3], subhi[3];
-	
-	int id, localid;
-	int tid, rid;                                // type index and region index
+	class CreateParticle : protected Pointers {
+	public:
+		int nparticles_previous, nparticles_now;     // number of particles created in one command
+		int npx, npy, npz;                           // number of particle along each edge of the corresponding region
+		double xlo, xhi, ylo, yhi, zlo, zhi;         // the lower bound of the coresponding region
+		double xle, yle, zle;
+		double extent_xlo, extent_xhi, extent_ylo, extent_yhi, extent_zlo, extent_zhi;
+		double extent_xle, extent_yle, extent_zle;
+		double dx, dy, dz;                           // lattice spacing
+		double sublo[3], subhi[3];
 
-	double rho;                                  // number of density
+		int id, localid;
+		int tid, rid;                                // type index and region index
 
-	// create particle with radius distribution
-	double rsingle, rlo, rhi, rmean, rsigma;
-	int dist_style;
+		double rho;                                  // number of density
 
-	CreateParticle(class PDPS *);
-	void command(int, char **);
-	void create_number_density(int,int);
-	void create_single(double, double, double);
-	void create_spacing(int, int);
-	void create_random();
+		// create particle with radius distribution
+		double rsingle, rlo, rhi, rmean, rsigma;
+		int dist_style;
 
-private:
-	int n_target;
-	int seed;
-	double spacing;                    // the smallest radius of particle to be created
-	class Lattice *lattice;
-	class RanPark *random_radius;
+		// create particle for curve blade
+		int n_width, n_height;
+		double axis_h, C_thita, width, height, ang0, cen1_x, cen1_y;	// HV
 
-	int random_no_overlap_flag;
+		CreateParticle(class PDPS *);
+		void command(int, char **);
+		void create_number_density(int, int);
+		void create_single(double, double, double);
+		void create_spacing(int, int);
+		void create_HV();
+		void create_random();
 
-	void find_factors2(int,int *);
-	void find_factors3(int,int *);
+	private:
+		int n_target;
+		int seed;
+		double spacing;                    // the smallest radius of particle to be created
+		class Lattice *lattice;
+		class RanPark *random_radius;
 
-	double get_uniform_radius();
-	double get_gaussian_radius();
-};
+		int random_no_overlap_flag;
+
+		void find_factors2(int, int *);
+		void find_factors3(int, int *);
+
+		double get_uniform_radius();
+		double get_gaussian_radius();
+	};
 
 }
 

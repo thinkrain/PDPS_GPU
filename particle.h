@@ -108,7 +108,7 @@ public:
 	double	*devForceX, *devForceY, *devForceZ;
 	double	*devVeloX, *devVeloY, *devVeloZ;
 	double	*devVestX, *devVestY, *devVestZ;
-	double  *devRho, *devRadius, *devRmass, *devDensity, *devPoro, *devVolume;
+	double  *devRho, *devRadius, *devRmass, *devDensity, *devPoro, *devVolume, *devHlocal;
 
 	// pointer to pre-allocated device buffer
 	double	*devHostCoord;
@@ -120,7 +120,7 @@ public:
 	int *devHostType;
 	int *devHostMask;
 	double	*devHostMassType;
-	double *devHostRadius, *devHostRmass, *devHostDensity, *devHostPoro, *devHostVolume;
+	double *devHostRadius, *devHostRmass, *devHostDensity, *devHostPoro, *devHostVolume, *devHostHlocal;
 
 	// pointer to host memory, e.g. atom->x
 	double	*ptrHostCoord;
@@ -132,7 +132,7 @@ public:
 	int *ptrHostType;
 	int *ptrHostMask;
 	double	*ptrHostMassType;
-	double *ptrHostRadius, *ptrHostRmass, *ptrHostDensity, *ptrHostPoro, *ptrHostVolume;
+	double *ptrHostRadius, *ptrHostRmass, *ptrHostDensity, *ptrHostPoro, *ptrHostVolume, *ptrHostHlocal;
 
 	//	GPU pin memory
 	void PinHostArray();

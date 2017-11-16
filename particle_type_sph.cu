@@ -128,6 +128,7 @@ void ParticleTypeSph::grow(int n)
 	cudaMalloc(&particle->devRmass, nmax * sizeof(double));
 	cudaMalloc(&particle->devPoro, nmax * sizeof(double));
 	cudaMalloc(&particle->devVolume, nmax * sizeof(double));
+	cudaMalloc(&particle->devHlocal, nmax * sizeof(double));
 	//	pin memory to memories when GPU has easy access
 	particle->PinHostArray();
 

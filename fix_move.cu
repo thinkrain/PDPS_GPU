@@ -1,10 +1,10 @@
 /* ----------------------------------------------------------------------
-PDPS - Particle Dynamics Parallel Simulator
+   PDPS - Particle Dynamics Parallel Simulator
+   
+   Copyright (2012) reserved by Lingqi Yang. 
+   Email: ly2282@columbia.edu
 
-Copyright (2012) reserved by Lingqi Yang.
-Email: ly2282@columbia.edu
-
-See the README file in the PDPS directory.
+   See the README file in the PDPS directory.
 ------------------------------------------------------------------------- */
 
 #include "math.h"
@@ -19,6 +19,14 @@ See the README file in the PDPS directory.
 #include "group.h"
 #include "update.h"
 #include "parallel.h"
+#include <iostream>
+#include <fstream>
+#include <iomanip>
+
+#include "pdps_cuda.h"
+#include "cuda_engine.h"
+#include "device_launch_parameters.h"
+#include "device_functions.h"
 
 using namespace PDPS_NS;
 using namespace FixConst;
@@ -29,18 +37,79 @@ enum{ RTI, HV, CONSTANT };
 
 /* ---------------------------------------------------------------------- */
 
+__global__ void gpumoveHVonce(double *devCoordX, double *devCoordY, double *devCoordZ, int *devMask, const int groupbit,
+								double *devVolume, double *devHlocal,
+								const int nlocal, const double axis1_x, const double axis1_y) {
+	int i = blockIdx.x * blockDim.x + threadIdx.x;
+	
+	for (i = i; i < nlocal; i += blockDim.x * gridDim.x){
+		if (devMask[i] & groupbit){
+			devHlocal[i] = (devCoordX[i] - axis1_x) * (devCoordX[i] - axis1_x) + (devCoordY[i] - axis1_y) * (devCoordY[i] - axis1_y);
+			devHlocal[i] = sqrt(devHlocal[i]);
+			if (devHlocal[i] < 0.0001)
+				devVolume[i] = 0;
+			else{
+				if (devCoordX[i] > axis1_x){
+					if (devCoordY[i] > axis1_y)
+						devVolume[i] = asin((devCoordY[i] - axis1_y) / devHlocal[i]);
+					else
+						devVolume[i] = asin((devCoordY[i] - axis1_y) / devHlocal[i]) + 2 * PI;
+				}
+				else
+					devVolume[i] = PI - asin((devCoordY[i] - axis1_y) / devHlocal[i]);
+			}
+		}
+	}
+
+}
+
+__global__ void gpumoveHV(double *devCoordX, double *devCoordY, double *devCoordZ, int *devMask, const int groupbit,
+							double *devVolume, double *devHlocal,
+							const int nlocal, const double axis1_x, const double axis1_y,
+							const double ang1, const double ang2, const int direction) {
+	int i = blockIdx.x * blockDim.x + threadIdx.x;
+	
+	for (i = i; i < nlocal; i += blockDim.x * gridDim.x){
+		if (devMask[i] & groupbit){
+			if (direction == 1){
+				devCoordX[i] = axis1_x + devHlocal[i] * cos(ang1 + ang2 + devVolume[i]);
+				devCoordY[i] = axis1_y + devHlocal[i] * sin(ang1 + ang2 + devVolume[i]);
+			}
+			else{
+				devCoordX[i] = axis1_x - devHlocal[i] * cos(ang1 + ang2 + devVolume[i]);
+				devCoordY[i] = axis1_y - devHlocal[i] * sin(ang1 + ang2 + devVolume[i]);
+			}
+		}
+	}
+
+}
+
+__global__ void gpumoveCONSTANT(double *devCoordX, double *devCoordY, double *devCoordZ, int *devMask, const int groupbit,
+						const int nlocal, const double dx, const double dy, const double dz){
+	int i = blockIdx.x * blockDim.x + threadIdx.x;
+	
+	for (i = i; i < nlocal; i += blockDim.x * gridDim.x){
+		if (devMask[i] & groupbit){
+			devCoordX[i] += dx;
+			devCoordY[i] += dy;
+			devCoordZ[i] += dz;
+		}
+	}
+
+}
+
 FixMove::FixMove(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 {
 	if (narg < 5) {
-		error->all(FLERR, "Illegal fix move command");
+		error->all(FLERR,"Illegal fix move command");
 	}
-
-
+	
+	
 	int iarg;
 	iarg = 3;
 	gid = group->find_group(arg[1]);
 	while (iarg < narg) {
-		if (!strcmp(arg[iarg], "RTI")) {
+		if (!strcmp(arg[iarg],"RTI")) {
 			move_style = RTI;
 			kx = atof(arg[4]);
 			ky = atof(arg[5]);
@@ -133,7 +202,8 @@ void FixMove::post_force()
 				}
 			}
 			once_flag = 1;
-
+			std::cout<<"move_style of 'RTI' has not been GPU parallelized yet!"<<std::endl;
+			exit(1);
 		}
 	}
 	else if (move_style == HV){
@@ -146,7 +216,7 @@ void FixMove::post_force()
 				ang1 = ang0_1 + axis1_w * process / 2.0 * time;
 				ang2 = ang0_2 + axis2_w * process / 2.0 * time;
 			}
-			else if (endprocess < 0){
+			else if(endprocess < 0){
 				ang1 = ang0_1 + axis1_w * (time - processtime / 2.0);
 				ang2 = ang0_2 + axis2_w * (time - processtime / 2.0);
 			}
@@ -158,45 +228,53 @@ void FixMove::post_force()
 			axis1_y = cen1_y + axis1_r * sin(ang1);
 			axis2_x = axis1_x + axis2_r * cos(ang2);
 			axis2_y = axis1_y + axis2_r * sin(ang2);
-			if (once_flag == 0){
-				for (int i = 0; i < nlocal; i++){
-					if (mask[i] & groupbit){
-						hlocal[i] = (x[i][0] - axis1_x) * (x[i][0] - axis1_x) + (x[i][1] - axis1_y) * (x[i][1] - axis1_y);
-						hlocal[i] = sqrt(hlocal[i]);
-						if (hlocal[i] < 0.0001)
-							volume[i] = 0;
-						else{
-							if (x[i][0] > axis1_x){
-								if (x[i][1] > axis1_y)
-									volume[i] = asin((x[i][1] - axis1_y) / hlocal[i]);
-								else
-									volume[i] = asin((x[i][1] - axis1_y) / hlocal[i]) + 2 * PI;
-							}
-							else
-								volume[i] = PI - asin((x[i][1] - axis1_y) / hlocal[i]);
-						}
-					}
-				}
+ 			if (once_flag == 0){
+//				for (int i = 0; i < nlocal; i++){
+//					if (mask[i] & groupbit){
+//						hlocal[i] = (x[i][0] - axis1_x) * (x[i][0] - axis1_x) + (x[i][1] - axis1_y) * (x[i][1] - axis1_y);
+//						hlocal[i] = sqrt(hlocal[i]);
+//						if (hlocal[i] < 0.0001)
+//							volume[i] = 0;
+//						else{
+//							if (x[i][0] > axis1_x){
+//								if (x[i][1] > axis1_y)
+//									volume[i] = asin((x[i][1] - axis1_y) / hlocal[i]);
+//								else
+//									volume[i] = asin((x[i][1] - axis1_y) / hlocal[i]) + 2 * PI;
+//							}
+//							else
+//								volume[i] = PI - asin((x[i][1] - axis1_y) / hlocal[i]);
+//						}
+//					}
+//				}
 				once_flag = 1;
+				gpumoveHVonce << < int(nlocal + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> >
+					(particle->devCoordX, particle->devCoordY, particle->devCoordZ, particle->devMask, groupbit,
+					particle->devVolume, particle->devHlocal,
+					nlocal, axis1_x, axis1_y);
 			}
-			for (int i = 0; i < nlocal; i++){
-				if (mask[i] & groupbit){
-					if (direction == 1){
-						x[i][0] = axis1_x + hlocal[i] * cos(ang1 + ang2 + volume[i]);
-						x[i][1] = axis1_y + hlocal[i] * sin(ang1 + ang2 + volume[i]);
-						//if (particle->tag[i] == 10){
-						//	printf("T=%d procid = %d", update->ntimestep,parallel->procid);
-						//	printf("axis1_x = %f\n hlocal[i]=%f\n ang1=%f\n ang2=%f\n volume[i]=%f\n", axis1_x, hlocal[i], ang1, ang2, volume[i]);
-						//	printf("x[%d][0] = %f x[%d][1] = %f\n", i, x[i][0], i, x[i][1]);
-						//}
-					}
-					else{
-						x[i][0] = axis1_x - hlocal[i] * cos(ang1 + ang2 + volume[i]);
-						x[i][1] = axis1_y - hlocal[i] * sin(ang1 + ang2 + volume[i]);
-					}
-
-				}
-			}
+//			for (int i = 0; i < nlocal; i++){
+//				if (mask[i] & groupbit){
+//					if (direction == 1){
+//						x[i][0] = axis1_x + hlocal[i] * cos(ang1 + ang2 + volume[i]);
+//						x[i][1] = axis1_y + hlocal[i] * sin(ang1 + ang2 + volume[i]);
+//						//if (particle->tag[i] == 10){
+//						//	printf("T=%d procid = %d", update->ntimestep,parallel->procid);
+//						//	printf("axis1_x = %f\n hlocal[i]=%f\n ang1=%f\n ang2=%f\n volume[i]=%f\n", axis1_x, hlocal[i], ang1, ang2, volume[i]);
+//						//	printf("x[%d][0] = %f x[%d][1] = %f\n", i, x[i][0], i, x[i][1]);
+//						//}
+//					}
+//					else{
+//						x[i][0] = axis1_x - hlocal[i] * cos(ang1 + ang2 + volume[i]);
+//						x[i][1] = axis1_y - hlocal[i] * sin(ang1 + ang2 + volume[i]);
+//					}
+//
+//				}
+//			}
+			gpumoveHV << < int(nlocal + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> >
+				(particle->devCoordX, particle->devCoordY, particle->devCoordZ, particle->devMask, groupbit,
+				particle->devVolume, particle->devHlocal,
+				nlocal, axis1_x, axis1_y, ang1, ang2, direction);
 
 		}	// time >= 0
 
@@ -207,15 +285,19 @@ void FixMove::post_force()
 			dx = move_v * move_dx * update->dt;
 			dy = move_v * move_dy * update->dt;
 			dz = move_v * move_dz * update->dt;
-			for (int i = 0; i < nlocal; i++){
-				if (mask[i] & groupbit){
-					x[i][0] += dx;
-					x[i][1] += dy;
-					x[i][2] += dz;
-				}
-			}
+//			for (int i = 0; i < nlocal; i++){
+//				if (mask[i] & groupbit){
+//					x[i][0] += dx;
+//					x[i][1] += dy;
+//					x[i][2] += dz;
+//				}
+//			}
+			gpumoveCONSTANT << < int(nlocal + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> >
+				(particle->devCoordX, particle->devCoordY, particle->devCoordZ, particle->devMask, groupbit,
+				nlocal, dx, dy, dz);
 		}	// ntimestep 
 
 	}	// move_style == CONSTANT
 
 }
+    

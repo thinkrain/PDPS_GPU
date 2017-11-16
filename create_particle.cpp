@@ -1,10 +1,10 @@
 /* ----------------------------------------------------------------------
-   PDPS - Particle Dynamics Parallel Simulator
+PDPS - Particle Dynamics Parallel Simulator
 
-   Copyright (2012) reserved by Lingqi Yang. 
-   Email: ly2282@columbia.edu
+Copyright (2012) reserved by Lingqi Yang.
+Email: ly2282@columbia.edu
 
-   See the README file in the top-level PDPS directory.
+See the README file in the top-level PDPS directory.
 ------------------------------------------------------------------------- */
 
 #include "math.h"
@@ -31,17 +31,18 @@ using namespace PsMath_NS;
 
 #define GAP 1.0e-6           // define small GAP (GAP = GAP*spacing) set at two ends of each edge
 #define MAX_TRY 10000        // maximum # of try to get valid random radius 
+#define PI 3.1416
 
-enum{ATOMIC, SINGLE, UNIFORM, GAUSSIAN};
+enum{ ATOMIC, SINGLE, UNIFORM, GAUSSIAN, HV };
 
-CreateParticle::CreateParticle(PDPS *ps) : Pointers (ps) {}
+CreateParticle::CreateParticle(PDPS *ps) : Pointers(ps) {}
 
 /* ---------------------------------------------------------------------- */
 
-void CreateParticle::command(int narg, char **arg) 
+void CreateParticle::command(int narg, char **arg)
 {
 	if (domain->box_exist == 0) {
-		error->all(FLERR,"Create_particle command before simulation box is defined");
+		error->all(FLERR, "Create_particle command before simulation box is defined");
 	}
 	random_no_overlap_flag = 0;
 
@@ -57,77 +58,77 @@ void CreateParticle::command(int narg, char **arg)
 
 	int iarg = 0;
 	while (iarg < narg) {
-		if (!strcmp(arg[iarg+1], "single")) {
+		if (!strcmp(arg[iarg + 1], "single")) {
 			tid = atoi(arg[iarg]);
-			double x = atof(arg[iarg+2]);
-			double y = atof(arg[iarg+3]);
-			double z = atof(arg[iarg+4]);
+			double x = atof(arg[iarg + 2]);
+			double y = atof(arg[iarg + 3]);
+			double z = atof(arg[iarg + 4]);
 			if (particle->radius_flag) {
 				if (narg != 6) error->all(FLERR, "Particle radius is needed for this type of \"particle_style\"");
-				rsingle = atof(arg[iarg+5]);
+				rsingle = atof(arg[iarg + 5]);
 			}
 			create_single(x, y, z);
 			iarg += 6;
 		}
-		else if (strcmp(arg[iarg+1], "number_density") == 0) {
+		else if (strcmp(arg[iarg + 1], "number_density") == 0) {
 			tid = atoi(arg[iarg]);
-			rho = atof(arg[iarg+2]);
-			rid = domain->find_region(arg[iarg+3]);
+			rho = atof(arg[iarg + 2]);
+			rid = domain->find_region(arg[iarg + 3]);
 			if (rid == -1) error->all(FLERR, "Cannot find the region");
 			if (particle->radius_flag) {
 				if (narg <= 4) error->all(FLERR, "Particle radius is needed for this type of \"particle_style\"");
-				if (!strcmp(arg[iarg+4], "single")) {
+				if (!strcmp(arg[iarg + 4], "single")) {
 					dist_style = SINGLE;
-					rsingle = atof(arg[iarg+5]);
+					rsingle = atof(arg[iarg + 5]);
 					iarg += 6;
 				}
-				else if (!strcmp(arg[iarg+4], "uniform")) {
+				else if (!strcmp(arg[iarg + 4], "uniform")) {
 					dist_style = UNIFORM;
-					rlo = atof(arg[iarg+5]);
-					rhi = atof(arg[iarg+6]);
-					seed = atoi(arg[iarg+7]);
+					rlo = atof(arg[iarg + 5]);
+					rhi = atof(arg[iarg + 6]);
+					seed = atoi(arg[iarg + 7]);
 					iarg += 8;
 				}
-				else if (!strcmp(arg[iarg+4], "gaussian")) {
+				else if (!strcmp(arg[iarg + 4], "gaussian")) {
 					dist_style = GAUSSIAN;
-					rlo = atof(arg[iarg+5]);
-					rhi = atof(arg[iarg+6]);
-					rmean = atof(arg[iarg+7]);
-					rsigma = atof(arg[iarg+8]);
-					seed = atoi(arg[iarg+9]);
+					rlo = atof(arg[iarg + 5]);
+					rhi = atof(arg[iarg + 6]);
+					rmean = atof(arg[iarg + 7]);
+					rsigma = atof(arg[iarg + 8]);
+					seed = atoi(arg[iarg + 9]);
 					iarg += 10;
 				}
 			}
 			create_number_density(tid, rid);
 			iarg += 4;
 		}
-		else if (!strcmp(arg[iarg+1], "random_no_overlap") || !strcmp(arg[iarg+1], "random")) {
+		else if (!strcmp(arg[iarg + 1], "random_no_overlap") || !strcmp(arg[iarg + 1], "random")) {
 			tid = atoi(arg[iarg]);
-			if (!strcmp(arg[iarg+1], "random_no_overlap")) random_no_overlap_flag = 1;
+			if (!strcmp(arg[iarg + 1], "random_no_overlap")) random_no_overlap_flag = 1;
 			else random_no_overlap_flag = 0;
-			spacing = atof(arg[iarg+2]);
-			n_target = atoi(arg[iarg+3]);
-			rid = domain->find_region(arg[iarg+4]);
+			spacing = atof(arg[iarg + 2]);
+			n_target = atoi(arg[iarg + 3]);
+			rid = domain->find_region(arg[iarg + 4]);
 			if (rid == -1) error->all(FLERR, "Cannot find the region");
 			if (particle->radius_flag) {
-				if (!strcmp(arg[iarg+5], "single")) {
+				if (!strcmp(arg[iarg + 5], "single")) {
 					dist_style = SINGLE;
-					rsingle = atof(arg[iarg+6]);
+					rsingle = atof(arg[iarg + 6]);
 					iarg += 7;
 				}
-				else if (!strcmp(arg[iarg+5], "uniform")) {
+				else if (!strcmp(arg[iarg + 5], "uniform")) {
 					iarg++;
 					dist_style = UNIFORM;
-					rlo = atof(arg[iarg+6]);
-					rhi = atof(arg[iarg+7]);
+					rlo = atof(arg[iarg + 6]);
+					rhi = atof(arg[iarg + 7]);
 					iarg += 8;
 				}
-				else if (!strcmp(arg[iarg+5], "gaussian")) {
+				else if (!strcmp(arg[iarg + 5], "gaussian")) {
 					dist_style = GAUSSIAN;
-					rlo = atof(arg[iarg+6]);
-					rhi = atof(arg[iarg+7]);
-					rmean = atof(arg[iarg+8]);
-					rsigma = atof(arg[iarg+9]);
+					rlo = atof(arg[iarg + 6]);
+					rhi = atof(arg[iarg + 7]);
+					rmean = atof(arg[iarg + 8]);
+					rsigma = atof(arg[iarg + 9]);
 					iarg += 10;
 				}
 			}
@@ -154,31 +155,46 @@ void CreateParticle::command(int narg, char **arg)
 			create_spacing(tid, rid);
 			iarg += 3;
 		}
+		else if (strcmp(arg[iarg + 1], "HV") == 0){
+			dist_style = HV;
+			tid = atoi(arg[iarg]);
+			axis_h = atof(arg[iarg + 2]);
+			cen1_x = atof(arg[iarg + 3]);
+			cen1_y = atof(arg[iarg + 4]);
+			C_thita = atof(arg[iarg + 5]);
+			n_width = atoi(arg[iarg + 6]);
+			n_height = atof(arg[iarg + 7]);
+			width = atof(arg[iarg + 8]);
+			height = atof(arg[iarg + 9]);
+			ang0 = atof(arg[iarg + 10]);
+			create_HV();
+			iarg += 11;
+		}
 		else error->all(FLERR, "Illegal create_particle command");
 	}
-		
+
 	delete lattice;
 
 	bigint nlocal = particle->nlocal;
 	MPI_Allreduce(&nlocal, &particle->nparticles, 1, MPI_INT, MPI_SUM, mworld);
-	
+
 	nparticles_now = particle->nparticles - nparticles_previous;
 
 	// Automatically update the number of particles in group "all"
 
 	if (nparticles_now == 0) {
-		error->all(FLERR,"No particle has been created, please check your input");
+		error->all(FLERR, "No particle has been created, please check your input");
 	}
 
 	group->update_all(nparticles_now);
-	
-	if (particle->nparticles < 0 || particle->nparticles > (int) pow(2.0,30)) {
-		error->all(FLERR,"Too many total particles");
+
+	if (particle->nparticles < 0 || particle->nparticles >(int) pow(2.0, 30)) {
+		error->all(FLERR, "Too many total particles");
 	}
 
 	if (parallel->procid == 0) {
 		char str[128];
-		sprintf(str,"%d of particles of type %d are created\n\n", nparticles_now, tid);
+		sprintf(str, "%d of particles of type %d are created\n\n", nparticles_now, tid);
 		output->print(str);
 	}
 
@@ -186,11 +202,11 @@ void CreateParticle::command(int narg, char **arg)
 }
 
 /* ----------------------------------------------------------------------
-   Creat single particle
+Creat single particle
 ---------------------------------------------------------------------- */
 
 void CreateParticle::create_single(double x, double y, double z)
-{ 
+{
 	double coord[3];
 
 	coord[0] = x;
@@ -206,11 +222,11 @@ void CreateParticle::create_single(double x, double y, double z)
 }
 
 /* ----------------------------------------------------------------------
-   Creat particles based on the lattice spacing (uniform)
+Creat particles based on the lattice spacing (uniform)
 ---------------------------------------------------------------------- */
 
 void CreateParticle::create_spacing(int tid, int rid)
-{   
+{
 	double coord[3];
 
 	xle = domain->regions[rid]->extent_xle;     // length along x coordinate
@@ -219,13 +235,13 @@ void CreateParticle::create_spacing(int tid, int rid)
 	yle = domain->regions[rid]->extent_yle;
 	ylo = domain->regions[rid]->extent_ylo;
 	yhi = domain->regions[rid]->extent_yhi;
-	zle = domain->regions[rid]->extent_zle;          
-	zlo = domain->regions[rid]->extent_zlo;    
+	zle = domain->regions[rid]->extent_zle;
+	zlo = domain->regions[rid]->extent_zlo;
 	zhi = domain->regions[rid]->extent_zhi;
 
-//	dx = domain->lsp[0];                        // store the lattice spacing
-//	dy = domain->lsp[1];
-//	dz = domain->lsp[2];
+	//	dx = domain->lsp[0];                        // store the lattice spacing
+	//	dy = domain->lsp[1];
+	//	dz = domain->lsp[2];
 	dx = domain->lattice->cle[0];
 	dy = domain->lattice->cle[1];
 	dz = domain->lattice->cle[2];
@@ -233,20 +249,20 @@ void CreateParticle::create_spacing(int tid, int rid)
 	if (dx < GAP)
 		npx = 1;
 	else
-		npx = int((xle - 2*GAP*xle)/dx) + 1;        // In order to avoid particle overlap on the box boundary, 
+		npx = int((xle - 2 * GAP*xle) / dx) + 1;        // In order to avoid particle overlap on the box boundary, 
 	if (dy < GAP)
 		npy = 1;
 	else
-		npy =  int((yle - 2*GAP*yle)/dy) + 1;       // there are two small GAPs 1/4*dx set at two ends of each edge
+		npy = int((yle - 2 * GAP*yle) / dy) + 1;       // there are two small GAPs 1/4*dx set at two ends of each edge
 	if (dz < GAP)
 		npz = 1;
 	else
-		npz =  int((zle - 2*GAP*zle)/dz) + 1;
+		npz = int((zle - 2 * GAP*zle) / dz) + 1;
 
 	// Creat particles
-	for (int k = 0; k < npz; k++) 
-	for (int j = 0; j < npy; j++) 
-	for (int i = 0; i < npx; i++) 
+	for (int k = 0; k < npz; k++)
+	for (int j = 0; j < npy; j++)
+	for (int i = 0; i < npx; i++)
 	{
 		coord[0] = xlo + GAP*xle + i*dx;
 		coord[1] = ylo + GAP*yle + j*dy;
@@ -259,15 +275,15 @@ void CreateParticle::create_spacing(int tid, int rid)
 			if (particle->radius_flag) particle->ptype->create_particle(tid, coord, rsingle);
 			else particle->ptype->create_particle(tid, coord);
 		}
-	} 
+	}
 }
 
 /* ----------------------------------------------------------------------
-   Creat particles based on the number of density (uniform)
+Creat particles based on the number of density (uniform)
 ---------------------------------------------------------------------- */
 
 void CreateParticle::create_number_density(int tid, int rid)
-{ 
+{
 	int i, j;
 	double length, area, vol;
 	int factors[3];
@@ -293,8 +309,8 @@ void CreateParticle::create_number_density(int tid, int rid)
 	extent_yle = region->extent_yle;
 	extent_ylo = region->extent_ylo;
 	extent_yhi = region->extent_yhi;
-	extent_zle = region->extent_zle;          
-	extent_zlo = region->extent_zlo;    
+	extent_zle = region->extent_zle;
+	extent_zlo = region->extent_zlo;
 	extent_zhi = region->extent_zhi;
 
 	if (dist_style == UNIFORM || dist_style == GAUSSIAN) random_radius = new RanPark(ps, seed);
@@ -309,7 +325,7 @@ void CreateParticle::create_number_density(int tid, int rid)
 		n_possible = static_cast<int> (length*rho);
 		n_target = n_possible;
 
-		double dr = length*(1 - 2*GAP) / (n_target - 1);
+		double dr = length*(1 - 2 * GAP) / (n_target - 1);
 		double pro_coord;
 		double coord[3];
 
@@ -324,8 +340,8 @@ void CreateParticle::create_number_density(int tid, int rid)
 			else if (dist_style == GAUSSIAN) radi = get_gaussian_radius();
 
 			if (coord[0] >= sublo[0] && coord[0] < subhi[0] &&
-			coord[1] >= sublo[1] && coord[1] < subhi[1] &&
-			coord[2] >= sublo[2] && coord[2] < subhi[2]) {
+				coord[1] >= sublo[1] && coord[1] < subhi[1] &&
+				coord[2] >= sublo[2] && coord[2] < subhi[2]) {
 				if (particle->radius_flag) particle->ptype->create_particle(tid, coord, radi);
 				else particle->ptype->create_particle(tid, coord);
 			}
@@ -361,17 +377,17 @@ void CreateParticle::create_number_density(int tid, int rid)
 
 		area = xle * yle;
 
-		n_possible = static_cast<int> (area*rho);	
+		n_possible = static_cast<int> (area*rho);
 		n_target = static_cast<int> (region->area*rho);
-		
+
 		find_factors2(n_possible, factors);
 
 		// In order to avoid particle overlap on the box boundary
-		dx = xle * (1 - 2*GAP) / (factors[0] - 1);
-		dy = yle * (1 - 2*GAP) / (factors[1] - 1);
+		dx = xle * (1 - 2 * GAP) / (factors[0] - 1);
+		dy = yle * (1 - 2 * GAP) / (factors[1] - 1);
 		dz = 0.0;
-		
-		npx = factors[0];        
+
+		npx = factors[0];
 		npy = factors[1];
 		npz = factors[2];
 
@@ -402,8 +418,8 @@ void CreateParticle::create_number_density(int tid, int rid)
 					else if (dist_style == GAUSSIAN) radi = get_gaussian_radius();
 
 					if (coord[0] >= sublo[0] && coord[0] < subhi[0] &&
-					coord[1] >= sublo[1] && coord[1] < subhi[1] &&
-					coord[2] >= sublo[2] && coord[2] < subhi[2]) {
+						coord[1] >= sublo[1] && coord[1] < subhi[1] &&
+						coord[2] >= sublo[2] && coord[2] < subhi[2]) {
 						if (particle->radius_flag) particle->ptype->create_particle(tid, coord, radi);
 						else particle->ptype->create_particle(tid, coord);
 						counter2++;
@@ -426,23 +442,23 @@ void CreateParticle::create_number_density(int tid, int rid)
 		yle = region->extent_yle;
 		ylo = region->extent_ylo;
 		yhi = region->extent_yhi;
-		zle = region->extent_zle;          
-		zlo = region->extent_zlo;    
+		zle = region->extent_zle;
+		zlo = region->extent_zlo;
 		zhi = region->extent_zhi;
 
 		vol = xle * yle * zle;
 		n_possible = static_cast<int> (vol*rho);
 		n_target = static_cast<int> (region->volume*rho);
-		
+
 		find_factors3(n_possible, factors);
 
 		// In order to avoid particle overlap on the box boundary
 		dx = dy = dz = 0.0;
-		if (factors[0] > 1) dx = xle * (1 - 2*GAP) / (factors[0] - 1);
-		if (factors[1] > 1) dy = yle * (1 - 2*GAP) / (factors[1] - 1);
-		if (factors[2] > 1) dz = zle * (1 - 2*GAP) / (factors[2] - 1);
+		if (factors[0] > 1) dx = xle * (1 - 2 * GAP) / (factors[0] - 1);
+		if (factors[1] > 1) dy = yle * (1 - 2 * GAP) / (factors[1] - 1);
+		if (factors[2] > 1) dz = zle * (1 - 2 * GAP) / (factors[2] - 1);
 
-		npx = factors[0];        
+		npx = factors[0];
 		npy = factors[1];
 		npz = factors[2];
 
@@ -464,7 +480,7 @@ void CreateParticle::create_number_density(int tid, int rid)
 					coord[0] = xlo + GAP*xle + i*dx;
 					coord[1] = ylo + GAP*yle + j*dy;
 					coord[2] = zlo + GAP*zle + k*dz;
-					
+
 					// tell if the point locates inside the projected domain
 					flag = region->inside(coord);
 					if (flag == 0) continue;
@@ -475,11 +491,11 @@ void CreateParticle::create_number_density(int tid, int rid)
 
 					// tell which processor it belongs to
 					if (coord[0] >= sublo[0] && coord[0] < subhi[0] &&
-					coord[1] >= sublo[1] && coord[1] < subhi[1] &&
-					coord[2] >= sublo[2] && coord[2] < subhi[2]) {
+						coord[1] >= sublo[1] && coord[1] < subhi[1] &&
+						coord[2] >= sublo[2] && coord[2] < subhi[2]) {
 						if (particle->radius_flag) particle->ptype->create_particle(tid, coord, radi);
 						else particle->ptype->create_particle(tid, coord);
-					    counter2++;
+						counter2++;
 					}
 
 					if (counter1 >= n_possible || counter2 >= n_target) {
@@ -496,7 +512,7 @@ void CreateParticle::create_number_density(int tid, int rid)
 }
 
 /* ----------------------------------------------------------------------
-   Creat particles based on the number of density (uniform)
+Creat particles based on the number of density (uniform)
 ---------------------------------------------------------------------- */
 
 void CreateParticle::create_random()
@@ -535,7 +551,7 @@ void CreateParticle::create_random()
 	if (domain->dim == 2) coz = 0;
 	ncoxyz = 2 * cox * 2 * coy * 2 * coz;
 	if (domain->dim == 2) ncoxyz = 2 * cox * 2 * coy;
-	
+
 	RanPark *random_coord;
 	random_coord = new RanPark(ps, seed);
 	if (dist_style == UNIFORM || dist_style == GAUSSIAN) random_radius = new RanPark(ps, seed);
@@ -564,7 +580,7 @@ void CreateParticle::create_random()
 	int iter;
 	int max_iter = 0;
 	int icx, icy, icz;
-	double radi, dist; 
+	double radi, dist;
 	double n[3];
 	for (m = 0; m < n_target; m++) {
 		exist_flag = 1;
@@ -580,10 +596,10 @@ void CreateParticle::create_random()
 			coord[1] = y*yle + ylo;
 			coord[2] = z*zle + zlo;
 			// the following two lines need further investigated  !!!!!!!
-//			if (particle->radius_flag) {
-//				dist = domain->regions[rid]->find_interaction_distance(n, coord);
-//				if (fabs(dist) < radi) continue;
-//			}
+			//			if (particle->radius_flag) {
+			//				dist = domain->regions[rid]->find_interaction_distance(n, coord);
+			//				if (fabs(dist) < radi) continue;
+			//			}
 
 			if (domain->dim == 2) coord[2] = 0.0;
 			cid = lattice->coord2cell(coord, icx, icy, icz);
@@ -602,10 +618,10 @@ void CreateParticle::create_random()
 			}
 
 			// the range cannot exceed the box boundary
-			if (icx-cox < 0 || icx+cox >= nc[0]) continue;
-			if (icy-coy < 0 || icy+coy >= nc[1]) continue;
-			if (icz-coz < 0 || icz+coz >= nc[2]) continue;
-			
+			if (icx - cox < 0 || icx + cox >= nc[0]) continue;
+			if (icy - coy < 0 || icy + coy >= nc[1]) continue;
+			if (icz - coz < 0 || icz + coz >= nc[2]) continue;
+
 			if (domain->dim == 3) {
 				for (k = icz - coz; k <= icz + coz; k++) {
 					for (j = icy - coy; j <= icy + coy; j++) {
@@ -650,8 +666,8 @@ void CreateParticle::create_random()
 				int n_created = n_now - nparticles_previous;
 				char str[1024];
 				sprintf(str, "Too many attempts to find a valid position to \
-					          create a particle in ramdom_no_overlap style. \
-							 Only %d particles have been created", n_created);
+							 					          create a particle in ramdom_no_overlap style. \
+														  							 Only %d particles have been created", n_created);
 				error->all(FLERR, str);
 			}
 			/*coord[0] = cell_coord[cid][0];
@@ -665,7 +681,7 @@ void CreateParticle::create_random()
 			}
 		}
 		max_iter = MAX(iter, max_iter);
-		
+
 		if (random_no_overlap_flag) {
 			// scan the offsets and mark the cell
 			if (domain->dim == 3) {
@@ -691,8 +707,8 @@ void CreateParticle::create_random()
 			}
 		}
 		// tell which processor it belongs to
-		if (coord[0] >= sublo[0] && coord[0] < subhi[0] && 
-			coord[1] >= sublo[1] && coord[1] < subhi[1] && 
+		if (coord[0] >= sublo[0] && coord[0] < subhi[0] &&
+			coord[1] >= sublo[1] && coord[1] < subhi[1] &&
 			coord[2] >= sublo[2] && coord[2] < subhi[2]) {
 			if (particle->radius_flag) particle->ptype->create_particle(tid, coord, radi);
 			else particle->ptype->create_particle(tid, coord);
@@ -700,35 +716,35 @@ void CreateParticle::create_random()
 	}
 
 	// The following block is used to visualize the radius distribution
-	
+
 	/*FILE *ftest;
 	ftest = fopen("radius_sample.txt", "w");
 	int ntest = 30;
 	int *test_count = new int[ntest];
 	double *test_vol = new double[ntest];
 	for (int i = 0; i < ntest; i++) {
-		test_count[i] = 0;
-		test_vol[i] = 0.0;
+	test_count[i] = 0;
+	test_vol[i] = 0.0;
 	}
 	double test_space = (rhi - rlo) / ntest;
 	int index;
 	double v_p = 0.0;
 	double test_temp;
 	for (int i = 0; i < particle->nlocal; i++) {
-		if (particle->type[i] == 3) {
-			test_temp = 3.1415926*particle->radius[i] * particle->radius[i];
-			index = (particle->radius[i] - rlo) / test_space;
-			v_p += test_temp;
-			if (index == ntest) index--;
-			test_count[index]++;
-			test_vol[index] += test_temp;
-		}
+	if (particle->type[i] == 3) {
+	test_temp = 3.1415926*particle->radius[i] * particle->radius[i];
+	index = (particle->radius[i] - rlo) / test_space;
+	v_p += test_temp;
+	if (index == ntest) index--;
+	test_count[index]++;
+	test_vol[index] += test_temp;
+	}
 	}
 	fprintf(ftest, "Total volume of particles is %f\n", v_p);
 	for (int i = 0; i < ntest; i++) {
-		fprintf(ftest, "%f %d %f\n", rlo + test_space*i, test_count[i], test_vol[i]);
+	fprintf(ftest, "%f %d %f\n", rlo + test_space*i, test_count[i], test_vol[i]);
 	}*/
-	
+
 	delete random_coord;
 	random_coord = NULL;
 	if (random_radius) delete random_radius;
@@ -737,28 +753,28 @@ void CreateParticle::create_random()
 }
 
 /* ----------------------------------------------------------------------
-   Find factors for 3D cases so that npx * npy * npz > number of 
-   particles to be created and make sure npx * npy * npz is the minimum 
-   among possible choices
+Find factors for 3D cases so that npx * npy * npz > number of
+particles to be created and make sure npx * npy * npz is the minimum
+among possible choices
 ---------------------------------------------------------------------- */
 
 void CreateParticle::find_factors3(int n, int *nbest)
-{ 
+{
 	int nmin[3];
 	int np[3];
-	int nx,ny,nz;
+	int nx, ny, nz;
 	double temp[3];
 	double c[3];
-	int closest,exceed;
+	int closest, exceed;
 
 	c[0] = 1.0;
-	c[1] = yle/xle;
-	c[2] = zle/xle;
+	c[1] = yle / xle;
+	c[2] = zle / xle;
 
-	temp[0] = pow(n/(c[1]*c[2]),1.0/3);
+	temp[0] = pow(n / (c[1] * c[2]), 1.0 / 3);
 	temp[1] = temp[0] * c[1];
 	temp[2] = temp[0] * c[2];
-	
+
 	for (int i = 0; i < 3; i++) {
 		nmin[i] = static_cast<int> (temp[i]);
 	}
@@ -768,7 +784,7 @@ void CreateParticle::find_factors3(int n, int *nbest)
 
 	np[0] = nbest[0] = nmin[0];
 	np[1] = nbest[1] = nmin[1];
-	np[2] = nbest[2] = nmin[2]; 
+	np[2] = nbest[2] = nmin[2];
 
 	// find the best factors
 	// 1st try add "1" to any one of the components
@@ -804,7 +820,7 @@ void CreateParticle::find_factors3(int n, int *nbest)
 	}
 
 	// 3rd try add "1" to all components
-	
+
 	for (int i = 0; i < 3; i++)
 		np[i] = nmin[i] + 1;
 
@@ -818,28 +834,28 @@ void CreateParticle::find_factors3(int n, int *nbest)
 }
 
 /* ----------------------------------------------------------------------
-   Find factors for 2D cases so that npx * npy * npz > number of 
-   particles to be created and make sure npx * npy * npz is the minimum 
-   among possible choices
+Find factors for 2D cases so that npx * npy * npz > number of
+particles to be created and make sure npx * npy * npz is the minimum
+among possible choices
 ---------------------------------------------------------------------- */
 
 void CreateParticle::find_factors2(int n, int *nbest)
-{ 
+{
 	int nmin[3];
 	int np[3];
-	int nx,ny,nz;
+	int nx, ny, nz;
 	double temp[3];
 	double c[3];
-	int closest,exceed;
+	int closest, exceed;
 
 	c[0] = 1.0;
-	c[1] = yle/xle;
+	c[1] = yle / xle;
 	c[2] = 0.0;
 
-	temp[0] = sqrt(n/c[1]); 
+	temp[0] = sqrt(n / c[1]);
 	temp[1] = temp[0] * c[1];
 	temp[2] = temp[0] * c[2];
-	
+
 	for (int i = 0; i < 3; i++) {
 		nmin[i] = static_cast<int> (temp[i]);
 	}
@@ -850,7 +866,7 @@ void CreateParticle::find_factors2(int n, int *nbest)
 
 	np[0] = nbest[0] = nmin[0];
 	np[1] = nbest[1] = nmin[1];
-	np[2] = nbest[2] = nmin[2]; 
+	np[2] = nbest[2] = nmin[2];
 
 	// find the best factors
 	// 1st try add "1" to any one of the components
@@ -886,7 +902,7 @@ void CreateParticle::find_factors2(int n, int *nbest)
 	}
 
 	// 3rd try add "1" to all components
-	
+
 	for (int i = 0; i < 2; i++)
 		np[i] = nmin[i] + 1;
 
@@ -913,7 +929,7 @@ double CreateParticle::get_uniform_radius()
 }
 
 /* ----------------------------------------------------------------------
-    get radius in a gaussian distribution
+get radius in a gaussian distribution
 ---------------------------------------------------------------------- */
 
 double CreateParticle::get_gaussian_radius()
@@ -930,4 +946,45 @@ double CreateParticle::get_gaussian_radius()
 	}
 
 	return radius;
+}
+
+/* ----------------------------------------------------------------------
+Creat particles for curve blade (HV)
+---------------------------------------------------------------------- */
+
+void CreateParticle::create_HV()
+{
+	double angle, xx, xy, xz;
+	double coord[3];
+	for (int i = 0; i < n_height; i++){
+		angle = i * 1.0 / n_height * (PI / 2) + ang0;
+		xz = axis_h - i * height;
+		xx = cen1_x + C_thita * cos(angle);
+		xy = cen1_y + C_thita * sin(angle);
+		coord[0] = xx;
+		coord[1] = xy;
+		coord[2] = xz;
+		if (coord[0] >= sublo[0] && coord[0] < subhi[0] &&
+			coord[1] >= sublo[1] && coord[1] < subhi[1] &&
+			coord[2] >= sublo[2] && coord[2] < subhi[2]) {
+			particle->ptype->create_particle(tid, coord);
+		}
+		for (int i = 1; i < n_width; i++){
+			coord[0] = xx + i * width * cos(angle);
+			coord[1] = xy + i * width * sin(angle);
+			if (coord[0] >= sublo[0] && coord[0] < subhi[0] &&
+				coord[1] >= sublo[1] && coord[1] < subhi[1] &&
+				coord[2] >= sublo[2] && coord[2] < subhi[2]) {
+				particle->ptype->create_particle(tid, coord);
+			}
+			coord[0] = xx - i * width * cos(angle);
+			coord[1] = xy - i * width * sin(angle);
+			if (coord[0] >= sublo[0] && coord[0] < subhi[0] &&
+				coord[1] >= sublo[1] && coord[1] < subhi[1] &&
+				coord[2] >= sublo[2] && coord[2] < subhi[2]) {
+				particle->ptype->create_particle(tid, coord);
+			}
+		}
+
+	}
 }
