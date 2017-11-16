@@ -25,11 +25,6 @@
 #include "string.h"
 #include "style_region.h"
 
-#include "pdps_cuda.h"
-#include "cuda_engine.h"
-#include "device_launch_parameters.h"
-#include "device_functions.h"
-
 using namespace PDPS_NS;
 
 #define DELTA 4         // For reallocation of memory, if the size of the array need to be expanded 
@@ -96,8 +91,6 @@ void Domain::init()
 {
 	box_change = 0;
 	for (int i = 0; i < nregions; i++) regions[i]->init();
-	gpuMemForRegions();
-	
 }
 
 /* ----------------------------------------------------------------------
@@ -455,7 +448,7 @@ void Domain::print_box(const char *str)
    GPU memcpy
    ---------------------------------------------------------------------- */
 
-void Domain::gpuMemForRegions() 
+void Domain::gpuMemForRegions(void) 
 {
 	cudaMalloc(&devStyle, nregions * sizeof(int));
 	cudaMalloc(&devRadiusCylinder, nregions * sizeof(double));

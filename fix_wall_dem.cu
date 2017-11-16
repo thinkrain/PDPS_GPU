@@ -53,7 +53,7 @@ using namespace PsMath_NS;
 #define Max_Wall 12
 
 enum{LSD};
-enum{BOUND=0, REGION};
+enum{BOUND, REGION};
 
 /* ---------------------------------------------------------------------- */
 
@@ -162,6 +162,10 @@ FixWallDEM::FixWallDEM(PDPS *ps, int narg, char **arg) : Fix(ps, narg, arg)
 	//modify->gpuwall_rid = wall_rid;
 	//modify->gpuwall_flag = wall_flag;
 	//modify->gpuwall_cut = cut;
+	hostWallContactFlag = NULL;
+	hostWallDrijtx = NULL;
+	hostWallDrijty = NULL;
+	hostWallDrijtz = NULL;
 	devWallContactFlag = NULL;
 	devWallDrijtx = NULL;
 	devWallDrijty = NULL;
@@ -204,6 +208,10 @@ FixWallDEM::~FixWallDEM()
 	delete pair_list;
 	pair_list = NULL;
 
+	free(hostWallContactFlag);
+	free(hostWallDrijtx);
+	free(hostWallDrijty);
+	free(hostWallDrijtz);
 	cudaFree(devWallContactFlag);
 	cudaFree(devWallDrijtx);
 	cudaFree(devWallDrijty);
@@ -242,6 +250,11 @@ void FixWallDEM::init()
 	pair_list->init_hash(size);
 
 	// Initialize GPU parameters
+	hostWallContactFlag = (int *)malloc(particle->nmax * nwalls * sizeof(int));
+	hostWallDrijtx = (double *)malloc(particle->nmax * nwalls * sizeof(double));
+	hostWallDrijty = (double *)malloc(particle->nmax * nwalls * sizeof(double));
+	hostWallDrijtz = (double *)malloc(particle->nmax * nwalls * sizeof(double));
+
 	cudaMalloc(&devWallContactFlag, particle->nmax * nwalls * sizeof(int));
 	cudaMemset(devWallContactFlag, 0, particle->nmax * nwalls * sizeof(int));
 	cudaMalloc(&devWallDrijtx, particle->nmax * nwalls * sizeof(double));
@@ -688,6 +701,35 @@ __device__ double gpu_regionPolygon_distance(
 	return dist;
 }
 
+__device__ void gpu_test(
+	double *devCoordX, double *devCoordY, double *devCoordZ,
+	double *devVeloX, double *devVeloY, double *devVeloZ, 
+	int *devWallContactFlag, double *devWallDrijtx, double *devWallDrijty, double *devWallDrijtz,
+	int *devWall, double *devCoords0, int *devWall_rid, int *devWall_flag,
+	double *devMass, double *devRadius, int *devType, int *devMask, const int nlocal, const int groupbit, const double dt,
+	const int radius_flag, const int torque_flag,
+	const double kn, const double cn, const double kt, const double ct, 
+	const double mu, const double cut, const int nwalls){
+	//devWallDrijty[0] = 1.6;
+}
+
+__device__ void gpu_test3(const double dt
+	){
+
+}
+
+__device__ void gpu_test2(
+	double *devCoordX, double *devCoordY, double *devCoordZ,
+	double *devVeloX, double *devVeloY, double *devVeloZ,
+	int *devWallContactFlag, double *devWallDrijtx, double *devWallDrijty, double *devWallDrijtz,
+	int *devWall, double *devCoords0, int *devWall_rid, int *devWall_flag,
+	double *devMass, double *devRadius, int *devType, int *devMask, const int nlocal, const int groupbit, const double dt,
+	const int radius_flag, const int torque_flag,
+	const double kn, const double Cn, const double kt, const double Ct, const double mu, const double cut, const int nwalls,
+	double *devForceX, double *devForceY, double *devForceZ,
+	const int iparticle, const double delta, double *n, const int iwall){
+
+}
 /* ---------------------------------------------------------------------- */
 
 __global__ void gpuPreforce(
@@ -716,6 +758,7 @@ __global__ void gpuPreforce(
 	//float_double fijn, fijnx, fijny, fijnz, fijt, fijtx, fijty, fijtz;
 	//unsigned int j, jj, itype, jtype, jnum;
 	//int contact_flag;
+
 	for (i = i; i < nlocal; i += blockDim.x * gridDim.x){
 		for (int iwall = 0; iwall < nwalls; iwall++) {
 			int rid;
@@ -743,8 +786,6 @@ __global__ void gpuPreforce(
 				}
 				else if (devWall_flag[iwall] == 1) {
 					rid = devWall_rid[iwall];
-					if (ntimestep>=1009 && i==3 && iwall==6) {
-					}
 					//dist = domain->regions[rid]->find_interaction_distance(n, x[i]);
 					if (devStyle[rid]==1) dist = gpu_regionCylinder_distance(
 													n, devCoordX[i], devCoordY[i], devCoordZ[i],
@@ -761,6 +802,7 @@ __global__ void gpuPreforce(
 														devA[rid], devB[rid], devC[rid], devD[rid]);
 				}
 				
+
 				// check if the particle is within the interaction range
 				if (radius_flag == 0 && fabs(dist) < cut) {
 					gpu_pre_force_dem_lsd(devCoordX, devCoordY, devCoordZ,
@@ -869,6 +911,8 @@ void FixWallDEM::pre_force()
 	// 		} // if (mask[i] & groupbit)
 	// 	} // for (int i = 0; i < nlocal; i++)
 	// } // for (iwall = 0; iwall < nwalls; iwall++)
+	cudaError_t error_t;
+
 	gpuPreforce << < int(nlocal + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> >
 	 (particle->devCoordX, particle->devCoordY, particle->devCoordZ,
 	  particle->devVeloX, particle->devVeloY, particle->devVeloZ,
@@ -884,6 +928,47 @@ void FixWallDEM::pre_force()
 	  domain->devCoord3X, domain->devCoord3Y, domain->devCoord3Z,
 	  domain->devCoord4X, domain->devCoord4Y, domain->devCoord4Z,
 	  domain->devA, domain->devB, domain->devC, domain->devD, update->ntimestep);
+
+	
+	//error_t = cudaMemcpy(neighbor->hostForceX, particle->devForceX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(neighbor->hostForceY, particle->devForceY, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(neighbor->hostForceZ, particle->devForceZ, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	//
+	//error_t = cudaMemcpy(neighbor->hostVeloX, particle->devVeloX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(neighbor->hostVeloY, particle->devVeloY, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(neighbor->hostVeloZ, particle->devVeloZ, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+
+	//error_t = cudaMemcpy(hostWallContactFlag, devWallContactFlag, particle->nmax * nwalls * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(hostWallDrijtx, devWallDrijtx, particle->nmax * nwalls * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(hostWallDrijty, devWallDrijty, particle->nmax * nwalls * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(hostWallDrijtz, devWallDrijtz, particle->nmax * nwalls * sizeof(double), cudaMemcpyDeviceToHost);
+
+	//error_t = cudaMemcpy(neighbor->hostForceX, particle->devForceX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(neighbor->hostForceZ, particle->devForceZ, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+
+	//error_t = cudaMemcpy(domain->hostStyle, domain->devStyle, domain->nregions * sizeof(int), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(domain->hostRadiusCylinder, domain->devRadiusCylinder, domain->nregions * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(domain->hostHeight, domain->devHeight, domain->nregions * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(domain->hostCoord1X, domain->devCoord1X, domain->nregions * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(domain->hostCoord1Y, domain->devCoord1Y, domain->nregions * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(domain->hostCoord1Z, domain->devCoord1Z, domain->nregions * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(domain->hostCoord2X, domain->devCoord2X, domain->nregions * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(domain->hostCoord2Y, domain->devCoord2Y, domain->nregions * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(domain->hostCoord2Z, domain->devCoord2Z, domain->nregions * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(domain->hostCoord3X, domain->devCoord3X, domain->nregions * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(domain->hostCoord3Y, domain->devCoord3Y, domain->nregions * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(domain->hostCoord3Z, domain->devCoord3Z, domain->nregions * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(domain->hostCoord4X, domain->devCoord4X, domain->nregions * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(domain->hostCoord4Y, domain->devCoord4Y, domain->nregions * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(domain->hostCoord4Z, domain->devCoord4Z, domain->nregions * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(domain->hostA, domain->devA, domain->nregions * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(domain->hostB, domain->devB, domain->nregions * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(domain->hostC, domain->devC, domain->nregions * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(domain->hostD, domain->devD, domain->nregions * sizeof(double), cudaMemcpyDeviceToHost);
+
+	//if (hostWallDrijtx[0] < 0.5)
+	//	error_t = error_t;
+ //	 particle->TransferG2C();
 }
 
 /* ----------------------------------------------------------------------

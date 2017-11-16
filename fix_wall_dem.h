@@ -53,6 +53,8 @@ private:
 	// GPU parameters
 	int *devWallContactFlag;
 	double *devWallDrijtx, *devWallDrijty, *devWallDrijtz;
+	int *hostWallContactFlag;
+	double *hostWallDrijtx, *hostWallDrijty, *hostWallDrijtz;
 	int *devWall;
 	double *devCoords0;
 	int *devWall_rid; 

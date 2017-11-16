@@ -21,8 +21,15 @@
 #include "region_polygon.h"
 #include "region_point.h"
 #include "update.h"
+#include "neighbor.h"
+#include "modify.h"
 
 #include "particle.h"
+
+#include "pdps_cuda.h"
+#include "cuda_engine.h"
+#include "device_launch_parameters.h"
+#include "device_functions.h"
 
 using namespace PDPS_NS;
 using namespace PhyConst;
@@ -59,7 +66,8 @@ RegionPolygon::RegionPolygon(PDPS *ps, int narg, char **arg) : Region(ps, narg, 
 	// parse options
 	int iarg = 2;
 	nps = 0;
-	int rid, pid;
+	int pid;
+	region_id = domain->nregions;
 	while (iarg < narg) {
 		if (!strcmp(arg[iarg], "rot")) {
 			rotate_flag = 1;
@@ -226,6 +234,188 @@ RegionPolygon::~RegionPolygon()
 	edges = NULL;
 }
 
+__global__ void gpu_rotate_point_around_axis(
+	const int itype, const int rid, const double theta, const int nlocal,
+	double *devCoordX, double *devCoordY, double *devCoordZ, int *devType,
+	double *devCoord101X, double *devCoord101Y, double *devCoord101Z,
+	double *devAxisNormX, double *devAxisNormY, double *devAxisNormZ){
+
+	double x, y, z;
+	double cost, sint;
+
+	float a = devCoord101X[rid];
+	float b = devCoord101Y[rid];
+	float c = devCoord101Z[rid];
+	float u = devAxisNormX[rid];
+	float v = devAxisNormY[rid];
+	float w = devAxisNormZ[rid];
+
+	int i = blockIdx.x * blockDim.x + threadIdx.x;
+	for (i = i; i < nlocal; i += blockDim.x * gridDim.x){
+		if (devType[i] == itype){
+			x = devCoordX[i];
+			y = devCoordY[i];
+			z = devCoordZ[i];
+
+			cost = cos(theta);
+			sint = sin(theta);
+
+			devCoordX[i] = (a*(v*v + w*w) - u*(b*v + c*w - u*x - v*y - w*z))*(1 - cost) +
+				x*cost + (-c*v + b*w - w*y + v*z)*sint;
+			devCoordY[i] = (b*(u*u + w*w) - v*(a*u + c*w - u*x - v*y - w*z))*(1 - cost) +
+				y*cost + (c*u - a*w + w*x - u*z)*sint;
+			devCoordZ[i] = (c*(u*u + v*v) - w*(a*u + b*v - u*x - v*y - w*z))*(1 - cost) +
+				z*cost + (-b*u + a*v - v*x + u*y)*sint;
+		}
+
+	}
+
+}
+
+__device__ void gpu_calc_normal(
+	int rid,
+	double *devCoord1X, double *devCoord1Y, double *devCoord1Z,
+	double *devCoord2X, double *devCoord2Y, double *devCoord2Z,
+	double *devCoord3X, double *devCoord3Y, double *devCoord3Z,
+	double *devCoord4X, double *devCoord4Y, double *devCoord4Z,
+	double *devA, double *devB, double *devC, double *devD){
+
+	double n12[3], n13[3], normal[3];
+	n12[0] = devCoord3X[rid] - devCoord2X[rid];
+	n12[1] = devCoord3Y[rid] - devCoord2Y[rid];
+	n12[2] = devCoord3Z[rid] - devCoord2Z[rid];
+	n13[0] = devCoord4X[rid] - devCoord2X[rid];
+	n13[1] = devCoord4Y[rid] - devCoord2Y[rid];
+	n13[2] = devCoord4Z[rid] - devCoord2Z[rid];
+
+	normal[0] = n12[1] * n13[2] - n12[2] * n13[1];
+	normal[1] = n12[2] * n13[0] - n12[0] * n13[2];
+	normal[2] = n12[0] * n13[1] - n12[1] * n13[0];
+
+	double sq = sqrt(normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]);
+
+	normal[0] /= sq;
+	normal[1] /= sq;
+	normal[2] /= sq;
+
+	// plane: ax + by + cz = d
+	devA[rid] = normal[0];
+	devB[rid] = normal[1];
+	devC[rid] = normal[2];
+	devD[rid] = devA[rid] * devCoord1X[rid] + devB[rid] * devCoord1Y[rid] + devC[rid] * devCoord1Z[rid];
+}
+
+__global__ void gpuDynamicCheck(
+	double *devCoordX, double *devCoordY, double *devCoordZ,
+	double *devVeloX, double *devVeloY, double *devVeloZ,
+	int *devWallContactFlag, double *devWallDrijtx, double *devWallDrijty, double *devWallDrijtz,
+	int *devWall, double *devCoords0, int *devWall_rid, int *devWall_flag,
+	double *devMass, double *devRadius, int *devType, int *devMask, const int nlocal, const double dt,
+	const int nwalls,
+	double *devForceX, double *devForceY, double *devForceZ,
+	int *devStyle, double *devRadiusCylinder, double *devHeight,
+	double *devCoord1X, double *devCoord1Y, double *devCoord1Z,
+	double *devCoord2X, double *devCoord2Y, double *devCoord2Z,
+	double *devCoord3X, double *devCoord3Y, double *devCoord3Z,
+	double *devCoord4X, double *devCoord4Y, double *devCoord4Z,
+	double *devA, double *devB, double *devC, double *devD,
+	const int ntimestep,
+	int *devRotateFlag, int *devStartFlag, int *devEndFlag,
+	int *devStart, int *devStableStart, int *devEnd, int *devStableEnd,
+	double *devOmegaTarget,
+	double *devCoord101X, double *devCoord101Y, double *devCoord101Z,
+	double *devCoord102X, double *devCoord102Y, double *devCoord102Z,
+	double *devAxisNormX, double *devAxisNormY, double *devAxisNormZ){
+	int iwall = blockIdx.x * blockDim.x + threadIdx.x;
+
+	//double cos_beta, sin_beta;
+	//double dist, dt;
+	double theta;
+	double romega, domega, omega[3], normal[3];
+	int ALI1, ALI2, ALI3;
+	double ALI11, ALI12, ALI13;
+	if (iwall < nwalls) {
+		ALI1 = iwall;
+		int rid = devWall_rid[iwall];
+		ALI2 = rid;
+		normal[0] = devAxisNormX[rid];
+		normal[1] = devAxisNormY[rid];
+		normal[2] = devAxisNormZ[rid];
+		double omega_target = devOmegaTarget[rid];
+		double start = devStart[rid];
+		double stable_start = devStableStart[rid];
+		double stop = devEnd[rid];
+		double stable_end = devStableEnd[rid];
+
+		if (devWall_flag[iwall] == 1 && devStyle[rid] == 2 &&
+			devRotateFlag[rid] == 1) {
+			//		if (dynamic_flag == ROT) {
+			// update rotating velocity
+			if (devStartFlag[rid] == 0) romega = omega_target;
+			else {
+				if (ntimestep < start) romega = 0.0;
+				else if (ntimestep >= start && ntimestep < stable_start) {
+					domega = omega_target / (stable_start - start);
+					romega = domega * (ntimestep - start);
+				}
+				else if (ntimestep >= stable_start) {
+					romega = omega_target;
+				}
+			}
+			if (devEndFlag[rid]) {
+				if (ntimestep >= stop) {
+					romega = 0.0;
+					//dynamic_flag = NONE;
+				}
+				else if (ntimestep >= stable_end && ntimestep < stop) {
+					domega = omega_target / (stop - stable_end);
+					romega = omega_target - domega * (ntimestep - stable_end);
+				}
+			}
+
+			for (int i = 0; i < 3; i++) omega[i] = romega*normal[i];
+
+			// rotate theta angle
+			theta = romega * dt;
+			//gpu_rotate_point_around_axis(1, 0, rid, theta, devCoordX, devCoordY, devCoordZ,
+			//	devCoord1X, devCoord1Y, devCoord1Z, devCoord101X, devCoord101Y, devCoord101Z,
+			//	devCoord102X, devCoord102Y, devCoord102Z, devAxisNormX, devAxisNormY, devAxisNormZ);
+			//gpu_rotate_point_around_axis(1, 0, rid, theta, devCoordX, devCoordY, devCoordZ,
+			//	devCoord2X, devCoord2Y, devCoord2Z, devCoord101X, devCoord101Y, devCoord101Z,
+			//	devCoord102X, devCoord102Y, devCoord102Z, devAxisNormX, devAxisNormY, devAxisNormZ);
+			//gpu_rotate_point_around_axis(1, 0, rid, theta, devCoordX, devCoordY, devCoordZ,
+			//	devCoord3X, devCoord3Y, devCoord3Z, devCoord101X, devCoord101Y, devCoord101Z,
+			//	devCoord102X, devCoord102Y, devCoord102Z, devAxisNormX, devAxisNormY, devAxisNormZ);
+			//gpu_rotate_point_around_axis(1, 0, rid, theta, devCoordX, devCoordY, devCoordZ,
+			//	devCoord4X, devCoord4Y, devCoord4Z, devCoord101X, devCoord101Y, devCoord101Z,
+			//	devCoord102X, devCoord102Y, devCoord102Z, devAxisNormX, devAxisNormY, devAxisNormZ);
+
+			// This part is used to visualize the blades.
+			// I did not delete it is because we may need it to visualize sth for debug use
+
+			for (int i = 0; i < nlocal; i++) {
+				if (devType[i] == 3) {
+			/*		gpu_rotate_point_around_axis(2, i, rid, theta, devCoordX, devCoordY, devCoordZ,
+						devCoord1X, devCoord1Y, devCoord1Z, devCoord101X, devCoord101Y, devCoord101Z,
+						devCoord102X, devCoord102Y, devCoord102Z, devAxisNormX, devAxisNormY, devAxisNormZ);*/
+				}
+			}
+			gpu_calc_normal(rid,
+				devCoord1X, devCoord1Y, devCoord1Z,
+				devCoord2X, devCoord2Y, devCoord2Z,
+				devCoord3X, devCoord3Y, devCoord3Z,
+				devCoord4X, devCoord4Y, devCoord4Z,
+				devA, devB, devC, devD);
+			int ALI99 = 100;
+		}
+	}
+	int ALI100 = ALI1 + ALI2 + ALI3;
+	double ALI110 = ALI11 + ALI12 + ALI13;
+	int ALI200 = ALI100 / ALI110;
+	int ALI300 = ALI200 + ALI100 + ALI110;
+	if (ALI1>0 && ALI200>50) ALI200 = ALI300;
+}
+
 /* ----------------------------------------------------------------------
    Dynamic check: 
    update rotation speed
@@ -272,14 +462,22 @@ void RegionPolygon::dynamic_check()
 			rot_axis->rotate_point_around_axis(coords[i], theta);
 		}
 
+
 		// This part is used to visualize the blades.
 		// I did not delete it is because we may need it to visualize sth for debug use
 
-		for (int i = 0; i < particle->nlocal; i++) {
-			if (particle->type[i] == 3 && strcmp(name, "blade1") == 0) {
-				rot_axis->rotate_point_around_axis(particle->x[i], theta);
-			}
-		}
+		//for (int i = 0; i < particle->nlocal; i++) {
+		//	if (particle->type[i] == 3 && strcmp(name, "blade1") == 0) {
+		//		rot_axis->rotate_point_around_axis(particle->x[i], theta);
+		//	}
+		//}
+		cudaError_t error_t;
+		gpu_rotate_point_around_axis << < int(particle->nlocal + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> >
+			(3, region_id, theta, particle->nlocal,
+			particle->devCoordX, particle->devCoordY, particle->devCoordZ, particle->devType,
+			domain->devCoord101X, domain->devCoord101Y, domain->devCoord101Z,
+			domain->devAxisNormX, domain->devAxisNormY, domain->devAxisNormZ);
+		error_t = cudaMemcpy(neighbor->hostCoordX, particle->devCoordX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
 	}
 	else if (dynamic_flag == TRA_ACC_SIN) {
 		double acc[3];
@@ -313,6 +511,64 @@ void RegionPolygon::dynamic_check()
 
 	calc_normal();
 	find_extent_bound();
+
+
+	//	update relavent parameters in GPU
+	domain->hostCoord1X[region_id] = domain->regions[region_id]->coords[0][0];
+	domain->hostCoord1Y[region_id] = domain->regions[region_id]->coords[0][1];
+	domain->hostCoord1Z[region_id] = domain->regions[region_id]->coords[0][2];
+	domain->hostCoord2X[region_id] = domain->regions[region_id]->coords[1][0];
+	domain->hostCoord2Y[region_id] = domain->regions[region_id]->coords[1][1];
+	domain->hostCoord2Z[region_id] = domain->regions[region_id]->coords[1][2];
+	domain->hostCoord3X[region_id] = domain->regions[region_id]->coords[2][0];
+	domain->hostCoord3Y[region_id] = domain->regions[region_id]->coords[2][1];
+	domain->hostCoord3Z[region_id] = domain->regions[region_id]->coords[2][2];
+	domain->hostCoord4X[region_id] = domain->regions[region_id]->coords[3][0];
+	domain->hostCoord4Y[region_id] = domain->regions[region_id]->coords[3][1];
+	domain->hostCoord4Z[region_id] = domain->regions[region_id]->coords[3][2];
+	domain->hostA[region_id] = domain->regions[region_id]->a;
+	domain->hostB[region_id] = domain->regions[region_id]->b;
+	domain->hostC[region_id] = domain->regions[region_id]->c;
+	domain->hostD[region_id] = domain->regions[region_id]->d;
+
+	cudaMemcpy(domain->devCoord1X, domain->hostCoord1X, domain->nregions * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(domain->devCoord1Y, domain->hostCoord1Y, domain->nregions * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(domain->devCoord1Z, domain->hostCoord1Z, domain->nregions * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(domain->devCoord2X, domain->hostCoord2X, domain->nregions * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(domain->devCoord2Y, domain->hostCoord2Y, domain->nregions * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(domain->devCoord2Z, domain->hostCoord2Z, domain->nregions * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(domain->devCoord3X, domain->hostCoord3X, domain->nregions * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(domain->devCoord3Y, domain->hostCoord3Y, domain->nregions * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(domain->devCoord3Z, domain->hostCoord3Z, domain->nregions * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(domain->devCoord4X, domain->hostCoord4X, domain->nregions * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(domain->devCoord4Y, domain->hostCoord4Y, domain->nregions * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(domain->devCoord4Z, domain->hostCoord4Z, domain->nregions * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(domain->devA, domain->hostA, domain->nregions * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(domain->devB, domain->hostB, domain->nregions * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(domain->devC, domain->hostC, domain->nregions * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(domain->devD, domain->hostD, domain->nregions * sizeof(double), cudaMemcpyHostToDevice);
+	//gpuDynamicCheck << < int(particle->nlocal + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> >
+	//	(particle->devCoordX, particle->devCoordY, particle->devCoordZ,
+	//	particle->devVeloX, particle->devVeloY, particle->devVeloZ,
+	//	neighbor->devWallContactFlag, neighbor->devWallDrijtx, neighbor->devWallDrijty, neighbor->devWallDrijtz,
+	//	neighbor->devWall, neighbor->devCoords0, neighbor->devWall_rid, neighbor->devWall_flag,
+	//	particle->devMass, particle->devRadius, particle->devType,
+	//	particle->devMask, particle->nlocal, update->dt,
+	//	modify->gpunwalls,
+	//	particle->devForceX, particle->devForceY, particle->devForceZ,
+	//	domain->devStyle, domain->devRadiusCylinder, domain->devHeight,
+	//	domain->devCoord1X, domain->devCoord1Y, domain->devCoord1Z,
+	//	domain->devCoord2X, domain->devCoord2Y, domain->devCoord2Z,
+	//	domain->devCoord3X, domain->devCoord3Y, domain->devCoord3Z,
+	//	domain->devCoord4X, domain->devCoord4Y, domain->devCoord4Z,
+	//	domain->devA, domain->devB, domain->devC, domain->devD,
+	//	update->ntimestep,
+	//	domain->devRotateFlag, domain->devStartFlag, domain->devEndFlag,
+	//	domain->devStart, domain->devStableStart, domain->devEnd, domain->devStableEnd,
+	//	domain->devOmegaTarget,
+	//	domain->devCoord101X, domain->devCoord101Y, domain->devCoord101Z,
+	//	domain->devCoord102X, domain->devCoord102Y, domain->devCoord102Z,
+	//	domain->devAxisNormX, domain->devAxisNormY, domain->devAxisNormZ);
 }
 
 /* ----------------------------------------------------------------------

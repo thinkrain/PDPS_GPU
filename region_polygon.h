@@ -44,6 +44,7 @@ public:
 private:
 	FILE *test;           // debug purpose
 
+	int region_id;
 
 	double inv_abc;                                   // 1.0 / sqrt(a*a + b*b + c*c)
 
