@@ -254,6 +254,8 @@ __global__  void gpuneighbuild2(int *devNumneigh, int *devPairtable, double *dev
 	}
 	__syncthreads();
 
+	
+
 	for (i = i; i < nlocal; i += blockDim.x * gridDim.x){
 		if (devMask[i] & slave_bit)
 			continue;
@@ -264,10 +266,11 @@ __global__  void gpuneighbuild2(int *devNumneigh, int *devPairtable, double *dev
 		double zi = devCoordZ[i];
 		
 		for (int jj = i; jj < nlocal + i; jj++){
-			if (jj > nlocal)
+			if (jj >= nlocal)
 				j = jj - nlocal;
 			else
 				j = jj;
+
 			dx = xi - devCoordX[j];
 			if (dx > -Rcut && dx < Rcut){
 				dy = yi - devCoordY[j];
@@ -1030,6 +1033,10 @@ void Neighbor::create_neigh_list()
 	float time;
 	cudaEventCreate(&start);
 	cudaEventCreate(&stop);
+
+	//error_t = cudaMemcpy(hostNumneigh, devNumneigh, particle->nlocal * sizeof(int), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(hostPairtable, devPairtable, particle->nlocal * NEIGHMAX * sizeof(int), cudaMemcpyDeviceToHost);
+
 	if (slave_flag){
 		cudaEventRecord(start, 0);
 		gpuneighbuild << < int(nall + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> >(devLinked_list, devHead, devNumneigh, devPairtable, devCoffsets, noffsets,
@@ -1044,6 +1051,9 @@ void Neighbor::create_neigh_list()
 		cudaEventElapsedTime(&time, start, stop);
 	}
 	else{
+	/*	gpuneighbuild << < int(nall + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> >(devLinked_list, devHead, devNumneigh, devPairtable, devCoffsets, noffsets,
+			devSubclo, devSubnc, devBoxhi, devBoxlo, devCle, devNc, devRneighsq, particle->devMask,
+			nall, subncxyz, subncxy, particle->devCoordX, particle->devCoordY, particle->devCoordZ, particle->devType, slave_bit);*/
 		gpuneighbuild2 << < int(nall + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> >(devNumneigh, devPairtable, devRneighsq, rneigh_max, particle->devMask,
 			nall, particle->devCoordX, particle->devCoordY, particle->devCoordZ, particle->devType, 0);
 	}
