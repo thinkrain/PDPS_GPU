@@ -172,5 +172,6 @@ void FixAcc::post_force()
 	//error_t = cudaMemcpy(neighbor->hostForceX, particle->devForceX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
 	//error_t = cudaMemcpy(neighbor->hostForceY, particle->devForceY, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
 	//error_t = cudaMemcpy(neighbor->hostForceZ, particle->devForceZ, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+	//error_t = cudaMemcpy(neighbor->hostVeloZ, particle->devVeloZ, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
 	//particle->TransferG2C();
 }
