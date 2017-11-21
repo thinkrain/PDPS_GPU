@@ -45,6 +45,9 @@ namespace PDPS_NS {
 		double *rho0, *soundspeed, *B;							//	parameters in SPH governing equation
 		int cubic_flag, quintic_flag;							//	flag to use which kernel function
 
+		//	GPU parameters
+		double *devRho0;
+
 	};
 
 }
