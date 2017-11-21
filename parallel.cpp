@@ -681,6 +681,8 @@ void Parallel::exchange()
 			} 
 			else i++;
 		}
+		if (nlocal < particle->nlocal)
+			particle->TransferC2G();
 		particle->nlocal = nlocal;
 		// send/recv particles in both directions
 		// if 1 proc in dimension, no send/recv, set recv buf to send buf
