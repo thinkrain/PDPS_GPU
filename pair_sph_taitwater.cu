@@ -38,15 +38,16 @@ using namespace PDPS_NS;
 #define PI 3.1416
 
 enum{ ARTIFICIAL, LAMINAR, SPS };
+enum{ VIS_LINEAR };
 
 __global__ void gpuComputesphforce(double *devCoordX, double *devCoordY, double *devCoordZ, int *devPairtable, int *devNumneigh,
-	double *devRho,  double *devMass, int *devType, int *devMask, const double h, const int nlocal, const double a3D,  int *devSetflag, 
+	double *devRho,  double *devMass, int *devType, double *devRadius, int *devMask, const double h, const int nlocal, const double a3D,  int *devSetflag, 
 	double *devCutsq, double *devRho0, double *devB, const int visc_flag, double *devVeloX, double *devVeloY, double *devVeloZ, 
-	double *devVisc, double *devSoundspeed,double *devForceX, double *devForceY, double *devForceZ){
+	double *devVisc, double *devSoundspeed,double *devForceX, double *devForceY, double *devForceZ, double *devPoro, const int sgroupbit){
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 
 	float wf, xtemp, ytemp, ztemp, rsq, delx, dely, delz, q, tmp, fi, fj, irho, jrho, rij_inv, delVdotDelR;
-	float vxtmp, vytmp, vztmp, mu, fviscx, fviscy, fviscz, wfd, fpair, imass, jmass;
+	float vxtmp, vytmp, vztmp, mu, fviscx, fviscy, fviscz, wfd, fpair, imass, jmass, coeporo;
 	unsigned int j, jj, itype, jtype, jnum;
 	__shared__ float mass[TYPEMAX];
 	__shared__ float rho0[TYPEMAX];
@@ -73,7 +74,8 @@ __global__ void gpuComputesphforce(double *devCoordX, double *devCoordY, double 
 
 	
 			itype = devType[i];
-			if (setflag[itype * TYPEMAX + itype] == 1){
+
+	//		if (setflag[itype * TYPEMAX + itype] == 1){
 				irho = devRho[i];
 				xtemp = devCoordX[i];
 				ytemp = devCoordY[i];
@@ -86,6 +88,8 @@ __global__ void gpuComputesphforce(double *devCoordX, double *devCoordY, double 
 				tmp = irho / rho0[itype];
 				fi = tmp * tmp * tmp;
 				fi = B[itype] * (fi * fi *tmp - 1.0) / (irho * irho);
+
+
 				for (jj = 0; jj < jnum; jj++){
 					j = devPairtable[i * NEIGHMAX + jj];
 					jtype = devType[j];
@@ -129,7 +133,17 @@ __global__ void gpuComputesphforce(double *devCoordX, double *devCoordY, double 
 							}
 							else if (visc_flag == 1){
 								// Laminar viscosity (Lo and Shao 2002)
-								mu = 2 * viscosity[itype * TYPEMAX + jtype] / (irho + jrho) / (rsq + 0.01 * h * h) * wfd / rij_inv;
+								mu = 4 * viscosity[itype * TYPEMAX + jtype] / (irho + jrho) / (rsq + 0.01 * h * h) * wfd / rij_inv;
+								if (devMask[i] & sgroupbit){
+									coeporo = 15 * devPoro[j] * devPoro[j];
+									coeporo = coeporo / ((1 - devPoro[j]) * (1 - devPoro[j]) * (1 - devPoro[j]) * devRadius[i] * devRadius[i]);
+									mu *= 1 + coeporo;
+								}
+								else if (devMask[j] & sgroupbit){
+									coeporo = 15 * devPoro[i] * devPoro[i];
+									coeporo = coeporo / ((1 - devPoro[i]) * (1 - devPoro[i]) * (1 - devPoro[i]) * devRadius[j] * devRadius[j]);
+									mu *= 1 + coeporo;
+								}
 								fviscx = mu * imass * jmass * (vxtmp - devVeloX[j]);
 								fviscy = mu * imass * jmass * (vytmp - devVeloY[j]);
 								fviscz = mu * imass * jmass * (vztmp - devVeloZ[j]);
@@ -144,12 +158,12 @@ __global__ void gpuComputesphforce(double *devCoordX, double *devCoordY, double 
 							devForceZ[i] += delz * fpair * rij_inv + fviscz;
 
 
-
 						}		//  rsq < cutsq[itype][jtype]
 
 					}	// setflag[itype * 10 + jtype]
 				}	// j < jnum
-			}	// setflag[itype * TYPEMAX + itype]
+
+		//	}	// setflag[itype * TYPEMAX + itype]
 
 	}
 
@@ -169,6 +183,7 @@ PairSPH_TAITWATER::PairSPH_TAITWATER(PDPS *ps) : Pair(ps)
 	 h = 0.0;
 	 cut = NULL;
 	 cutsq = NULL;
+	 visc_flag = 0;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -229,8 +244,6 @@ void PairSPH_TAITWATER::allocate()
 
 void PairSPH_TAITWATER::compute(int eflag, int vflag)
 {
-
-
 	int i, j, ii, jj, inum, jnum, itype, jtype;
   double xtmp, ytmp, ztmp, delx, dely, delz, fpair;
 
@@ -404,25 +417,31 @@ void PairSPH_TAITWATER::compute(int eflag, int vflag)
 	 cudaEventRecord(start, 0);
 
 	 gpuComputesphforce << < int(nlocal + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> >(particle->devCoordX, particle->devCoordY, particle->devCoordZ,
-	  neighbor->devPairtable, neighbor->devNumneigh, particle->devRho, particle->devMass, particle->devType,
+	  neighbor->devPairtable, neighbor->devNumneigh, particle->devRho, particle->devMass, particle->devType, particle->devRadius, 
 	  particle->devMask, h, nlocal, a3D, devSetflag, devCutsq, devRho0, devB, visc_flag,
 	  particle->devVestX, particle->devVestY, particle->devVestZ, devVisc, devSoundspeed,
-	  particle->devForceX, particle->devForceY, particle->devForceZ);
-
+	  particle->devForceX, particle->devForceY, particle->devForceZ, particle->devPoro, sgroupbit);
+	 
 	  cudaEventRecord(stop, 0);
 	  cudaEventSynchronize(stop);
 	  cudaEventElapsedTime(&time, start, stop);
- /* error_t = cudaMemcpy(neighbor->hostForceX, particle->devForceX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
-  error_t = cudaMemcpy(neighbor->hostForceY, particle->devForceY, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
-  error_t = cudaMemcpy(neighbor->hostForceZ, particle->devForceZ, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);*/
-  //error_t = cudaMemcpy(hostCutsq, devCutsq, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
- /* error_t = cudaMemcpy(neighbor->hostNumneigh, neighbor->devNumneigh, particle->nlocal * sizeof(int), cudaMemcpyDeviceToHost);
-  error_t = cudaMemcpy(neighbor->hostPairtable, neighbor->devPairtable, particle->nlocal * NEIGHMAX * sizeof(int), cudaMemcpyDeviceToHost);
-  error_t = cudaMemcpy(hostSetflag, devSetflag, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
-  error_t = cudaMemcpy(hostCutsq, devSetflag, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
-  error_t = cudaMemcpy(particle->ptrHostRho, particle->devRho, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
-  error_t = cudaMemcpy(neighbor->hostForceX, particle->devForceX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
-  error_t = cudaMemcpy(neighbor->hostForceZ, particle->devForceZ, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);*/
+	  if (update->ntimestep == 5600)
+		  stop = stop;
+  //error_t = cudaMemcpy(neighbor->hostForceX, particle->devForceX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+  //error_t = cudaMemcpy(neighbor->hostForceY, particle->devForceY, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+  //error_t = cudaMemcpy(neighbor->hostForceZ, particle->devForceZ, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+  //error_t = cudaMemcpy(particle->ptrHostRho, particle->devRho, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+  //error_t = cudaMemcpy(neighbor->hostCoordX, particle->devCoordX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+  //error_t = cudaMemcpy(neighbor->hostCoordY, particle->devCoordY, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+  //error_t = cudaMemcpy(neighbor->hostCoordZ, particle->devCoordZ, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+  //error_t = cudaMemcpy(particle->ptrHostRadius, particle->devRadius, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+  //error_t = cudaMemcpy(neighbor->hostNumneigh, neighbor->devNumneigh, particle->nlocal * sizeof(int), cudaMemcpyDeviceToHost);
+  //error_t = cudaMemcpy(neighbor->hostPairtable, neighbor->devPairtable, particle->nlocal * NEIGHMAX * sizeof(int), cudaMemcpyDeviceToHost);
+  //error_t = cudaMemcpy(hostSetflag, devSetflag, TYPEMAX * TYPEMAX * sizeof(int), cudaMemcpyDeviceToHost);
+  //error_t = cudaMemcpy(hostCutsq, devCutsq, TYPEMAX * TYPEMAX * sizeof(double), cudaMemcpyDeviceToHost);
+  //error_t = cudaMemcpy(particle->ptrHostRho, particle->devRho, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+  //error_t = cudaMemcpy(neighbor->hostForceX, particle->devForceX, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
+  //error_t = cudaMemcpy(neighbor->hostForceZ, particle->devForceZ, particle->nlocal * sizeof(double), cudaMemcpyDeviceToHost);
 
  // //particle->TransferG2C();
  
@@ -439,12 +458,13 @@ void PairSPH_TAITWATER::set_style(int narg, char **arg)
 //	if (narg != 4)
 //		error->all(FLERR, "Illegal number of setting arguments for pair_style sph/idealgas");
 	if (strcmp(arg[1], "Cubic") == 0)
-		cubic_flag = 1;  
+		cubic_flag = 1;
 	else if (strcmp(arg[1], "Quintic") == 0)
 		quintic_flag = 1;
+	else if (strcmp(arg[1], "Lammps") == 0)
+		lammps_flag = 1;
 	else
 		error->all(FLERR, "Wrong Kernel function");
-	//	viscosity type
 	if (strcmp(arg[2], "Artificial") == 0)
 		visc_flag = ARTIFICIAL;
 	else if (strcmp(arg[2], "Laminar") == 0)
@@ -453,6 +473,27 @@ void PairSPH_TAITWATER::set_style(int narg, char **arg)
 		visc_flag = SPS;
 	else
 		error->all(FLERR, "Wrong Viscosity function");
+	if (narg > 3){
+		if (strcmp(arg[3], "PoroDrag") == 0){
+			poro_flag = 1;
+			lgid = group->find_group(arg[4]);
+			if (lgid == -1) {
+				char str[128];
+				sprintf(str, "Cannot find group id: %s", arg[4]);
+				error->all(FLERR, str);
+			}
+			lgroupbit = group->bitmask[lgid];
+
+			sgid = group->find_group(arg[5]);
+			if (sgid == -1) {
+				char str[128];
+				sprintf(str, "Cannot find group id: %s", arg[5]);
+				error->all(FLERR, str);
+			}
+			sgroupbit = group->bitmask[sgid];
+		}
+
+	}
 
 }
 
@@ -478,6 +519,18 @@ void PairSPH_TAITWATER::set_coeff(int narg, char **arg)
   double cut_one = atof(arg[5]);
   double B_one = soundspeed_one * soundspeed_one * rho0_one / 7.0;
 
+  if (narg > 6){
+	  if (!strcmp(arg[6], "vis_linear")){
+		  visco_change = VIS_LINEAR;
+		  if (narg > 7)
+			  visco_rate = atof(arg[7]);
+		  else
+			  error->all(FLERR, "Incorrect args for pair coefficients");
+	  }
+	  else
+		  visco_change = 0;
+  }
+
   int count = 0;
   for (int i = ilo; i <= ihi; i++) {
     rho0[i] = rho0_one;
@@ -493,8 +546,11 @@ void PairSPH_TAITWATER::set_coeff(int narg, char **arg)
 		setflag[i][j] = 1;
 
 		hostSetflag[i * TYPEMAX + j] = setflag[i][j];
+		hostSetflag[j * TYPEMAX + i] = hostSetflag[i * TYPEMAX + j];
 		hostCutsq[i * TYPEMAX + j] = cutsq[i][j];
+		hostCutsq[j * TYPEMAX + i] = hostCutsq[i * TYPEMAX + j];
 		hostVisc[i * TYPEMAX + j] = viscosity[i][j];
+		hostVisc[j * TYPEMAX + i] = hostVisc[i * TYPEMAX + j];
       count++;
     }
   }

@@ -37,7 +37,10 @@ protected:
 	double **viscosity;
 	int visc_flag = 0;
 	int first;
-	int cubic_flag, quintic_flag;		//	flag to choose which kernel function
+	int cubic_flag, quintic_flag, lammps_flag;		//	flag to choose which kernel function
+	int visco_change, poro_flag;
+	double visco_rate;
+	int sgid, sgroupbit, lgid, lgroupbit;					//	group bit for liquid particles and solid particles
 	void allocate();
 
 	//GPU parameters
