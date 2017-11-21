@@ -178,11 +178,16 @@ void Output::write()
 	// dump
 	int ntimestep = update->ntimestep;
 	
+	bool transfered = false;
 	for (int i = 0; i < ndumps; i++) {
 		if (dump[i]->nevery != 0) {
-			if ((ntimestep % dump[i]->nevery == 0))   // check frequency
+			if ((ntimestep % dump[i]->nevery == 0)){				// check frequency
+				if (!transfered){
+					particle->TransferG2C();
+					transfered = true;
+				}
 				dump[i]->write();
-				
+			}
 		}
 	}
 
