@@ -1051,11 +1051,15 @@ void Neighbor::create_neigh_list()
 		cudaEventElapsedTime(&time, start, stop);
 	}
 	else{
-	/*	gpuneighbuild << < int(nall + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> >(devLinked_list, devHead, devNumneigh, devPairtable, devCoffsets, noffsets,
+		gpuneighbuild << < int(nall + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> >(devLinked_list, devHead, devNumneigh, devPairtable, devCoffsets, noffsets,
 			devSubclo, devSubnc, devBoxhi, devBoxlo, devCle, devNc, devRneighsq, particle->devMask,
-			nall, subncxyz, subncxy, particle->devCoordX, particle->devCoordY, particle->devCoordZ, particle->devType, slave_bit);*/
-		gpuneighbuild2 << < int(nall + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> >(devNumneigh, devPairtable, devRneighsq, rneigh_max, particle->devMask,
-			nall, particle->devCoordX, particle->devCoordY, particle->devCoordZ, particle->devType, 0);
+			nall, subncxyz, subncxy, particle->devCoordX, particle->devCoordY, particle->devCoordZ, particle->devType, 0);
+	/*	gpuneighbuild2 << < int(nall + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> >(devNumneigh, devPairtable, devRneighsq, rneigh_max, particle->devMask,
+			nall, particle->devCoordX, particle->devCoordY, particle->devCoordZ, particle->devType, 0);*/
+
+		cudaEventRecord(stop, 0);
+		cudaEventSynchronize(stop);
+		cudaEventElapsedTime(&time, start, stop);
 	}
 
 	//error_t = cudaMemcpy(hostNumneigh, devNumneigh, particle->nlocal * sizeof(int), cudaMemcpyDeviceToHost);
