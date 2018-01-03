@@ -15,7 +15,7 @@
 
 namespace PDPS_NS {
 
-#define  BLOCK_SIZE 512
+#define  BLOCK_SIZE 384
 #define GRID_SIZE 16
 #define TYPEMAX 10
 #define NEIGHMAX 200

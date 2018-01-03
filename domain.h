@@ -81,7 +81,8 @@ public:
 	void boundary_string(char *);
 	void print_box(const char *);
 	void gpuMemForRegions(void);
-	
+	void cleangpuMemForRegions(void);
+
 	// GPU parameters for DEM/wall
 	int *devStyle;
 	double *devRadiusCylinder;
@@ -98,6 +99,9 @@ public:
 	double *devCoord4X;
 	double *devCoord4Y;
 	double *devCoord4Z;
+	double *devVelo0X;
+	double *devVelo0Y;
+	double *devVelo0Z;
 	double *devA;
 	double *devB;
 	double *devC;
@@ -136,6 +140,9 @@ public:
 	double *hostCoord4X;
 	double *hostCoord4Y;
 	double *hostCoord4Z;
+	double *hostVelo0X;
+	double *hostVelo0Y;
+	double *hostVelo0Z;
 	double *hostA;
 	double *hostB;
 	double *hostC;

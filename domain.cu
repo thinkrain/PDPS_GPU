@@ -81,6 +81,7 @@ Domain::Domain(PDPS *ps) : Pointers(ps)
 
 Domain::~Domain()
 {
+	cleangpuMemForRegions();
 	for (int i = 0; i < nregions; i++) {
 		delete regions[i];
 		regions[i] = NULL;
@@ -472,6 +473,9 @@ void Domain::gpuMemForRegions()
 	cudaMalloc(&devCoord4X, nregions * sizeof(double));
 	cudaMalloc(&devCoord4Y, nregions * sizeof(double));
 	cudaMalloc(&devCoord4Z, nregions * sizeof(double));
+	cudaMalloc(&devVelo0X, nregions * sizeof(double));
+	cudaMalloc(&devVelo0Y, nregions * sizeof(double));
+	cudaMalloc(&devVelo0Z, nregions * sizeof(double));
 	cudaMalloc(&devA, nregions * sizeof(double));
 	cudaMalloc(&devB, nregions * sizeof(double));
 	cudaMalloc(&devC, nregions * sizeof(double));
@@ -509,6 +513,9 @@ void Domain::gpuMemForRegions()
 	hostCoord4X = (double *)malloc(nregions * sizeof(double));
 	hostCoord4Y = (double *)malloc(nregions * sizeof(double));
 	hostCoord4Z = (double *)malloc(nregions * sizeof(double));
+	hostVelo0X = (double *)malloc(nregions * sizeof(double));
+	hostVelo0Y = (double *)malloc(nregions * sizeof(double));
+	hostVelo0Z = (double *)malloc(nregions * sizeof(double));
 	hostA = (double *)malloc(nregions * sizeof(double));
 	hostB = (double *)malloc(nregions * sizeof(double));
 	hostC = (double *)malloc(nregions * sizeof(double));
@@ -567,6 +574,9 @@ void Domain::gpuMemForRegions()
 			hostCoord4X[i] = regions[i]->coords[3][0];
 			hostCoord4Y[i] = regions[i]->coords[3][1];
 			hostCoord4Z[i] = regions[i]->coords[3][2];
+			hostVelo0X[i] = regions[i]->v_coords[0][0];
+			hostVelo0Y[i] = regions[i]->v_coords[0][1];
+			hostVelo0Z[i] = regions[i]->v_coords[0][2];
 			hostA[i] = regions[i]->a;
 			hostB[i] = regions[i]->b;
 			hostC[i] = regions[i]->c;
@@ -623,6 +633,9 @@ void Domain::gpuMemForRegions()
 	cudaMemcpy(devCoord4X, hostCoord4X, nregions * sizeof(double), cudaMemcpyHostToDevice);
 	cudaMemcpy(devCoord4Y, hostCoord4Y, nregions * sizeof(double), cudaMemcpyHostToDevice);
 	cudaMemcpy(devCoord4Z, hostCoord4Z, nregions * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(devVelo0X, hostVelo0X, nregions * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(devVelo0Y, hostVelo0Y, nregions * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(devVelo0Z, hostVelo0Z, nregions * sizeof(double), cudaMemcpyHostToDevice);
 	cudaMemcpy(devA, hostA, nregions * sizeof(double), cudaMemcpyHostToDevice);
 	cudaMemcpy(devB, hostB, nregions * sizeof(double), cudaMemcpyHostToDevice);
 	cudaMemcpy(devC, hostC, nregions * sizeof(double), cudaMemcpyHostToDevice);
@@ -646,4 +659,89 @@ void Domain::gpuMemForRegions()
 	cudaMemcpy(devAxisNormZ, hostAxisNormZ, nregions * sizeof(double), cudaMemcpyHostToDevice);
 	// std::cout<<"nregions="<<nregions<<std::endl;
 	// exit(1);
+}
+
+void Domain::cleangpuMemForRegions()
+{
+	cudaFree(devStyle);
+	cudaFree(devRadiusCylinder);
+	cudaFree(devHeight);
+	cudaFree(devCoord1X);
+	cudaFree(devCoord1Y);
+	cudaFree(devCoord1Z);
+	cudaFree(devCoord2X);
+	cudaFree(devCoord2Y);
+	cudaFree(devCoord2Z);
+	cudaFree(devCoord3X);
+	cudaFree(devCoord3Y);
+	cudaFree(devCoord3Z);
+	cudaFree(devCoord4X);
+	cudaFree(devCoord4Y);
+	cudaFree(devCoord4Z);
+	cudaFree(devVelo0X);
+	cudaFree(devVelo0Y);
+	cudaFree(devVelo0Z);
+	cudaFree(devA);
+	cudaFree(devB);
+	cudaFree(devC);
+	cudaFree(devD);
+	cudaFree(devRotateFlag);
+	cudaFree(devStartFlag);
+	cudaFree(devEndFlag);
+	cudaFree(devStart);
+	cudaFree(devStableStart);
+	cudaFree(devEnd);
+	cudaFree(devStableEnd);
+	cudaFree(devOmegaTarget);
+	cudaFree(devCoord101X);
+	cudaFree(devCoord101Y);
+	cudaFree(devCoord101Z);
+	cudaFree(devCoord102X);
+	cudaFree(devCoord102Y);
+	cudaFree(devCoord102Z);
+	cudaFree(devAxisNormX);
+	cudaFree(devAxisNormY);
+	cudaFree(devAxisNormZ);
+	//
+	memory->destroy(hostStyle);
+	memory->destroy(hostRadiusCylinder);
+	memory->destroy(hostHeight);
+	memory->destroy(hostCoord1X);
+	memory->destroy(hostCoord1Y);
+	memory->destroy(hostCoord1Z);
+	memory->destroy(hostCoord2X);
+	memory->destroy(hostCoord2Y);
+	memory->destroy(hostCoord2Z);
+	memory->destroy(hostCoord3X);
+	memory->destroy(hostCoord3Y);
+	memory->destroy(hostCoord3Z);
+	memory->destroy(hostCoord4X);
+	memory->destroy(hostCoord4Y);
+	memory->destroy(hostCoord4Z);
+	memory->destroy(hostVelo0X);
+	memory->destroy(hostVelo0Y);
+	memory->destroy(hostVelo0Z);
+	memory->destroy(hostA);
+	memory->destroy(hostB);
+	memory->destroy(hostC);
+	memory->destroy(hostD);
+	memory->destroy(hostRotateFlag);
+	memory->destroy(hostStartFlag);
+	memory->destroy(hostEndFlag);
+	memory->destroy(hostStart);
+	memory->destroy(hostStableStart);
+	memory->destroy(hostEnd);
+	memory->destroy(hostStableEnd);
+	memory->destroy(hostOmegaTarget);
+	memory->destroy(hostCoord101X);
+	memory->destroy(hostCoord101Y);
+	memory->destroy(hostCoord101Z);
+	memory->destroy(hostCoord102X);
+	memory->destroy(hostCoord102Y);
+	memory->destroy(hostCoord102Z);
+	memory->destroy(hostAxisNormX);
+	memory->destroy(hostAxisNormY);
+	memory->destroy(hostAxisNormZ);
+	//
+	
 }

@@ -324,6 +324,7 @@ __device__ void gpu_pre_force_dem_lsd(
 	const int radius_flag, const int torque_flag,
 	const double kn, const double Cn, const double kt, const double Ct, const double mu, const double cut, const int nwalls,
 	double *devForceX, double *devForceY, double *devForceZ,
+	double vwall_x, double vwall_y, double vwall_z,
 	const int iparticle, const double delta, double *n, const int iwall){
 	
 	//int table, index;
@@ -334,7 +335,6 @@ __device__ void gpu_pre_force_dem_lsd(
 	float_double vijt, vijt_inv, vijtx, vijty, vijtz;          // relative velocity along tangential direction
 	float_double fijn, fijnx, fijny, fijnz;                    // normal force
 	float_double fijt, fijtx, fijty, fijtz;                    // tangential force	
-	float_double vel_wall[3];
 	//double fijt_a[3], fijt, fijtx, fijty, fijtz;         // tangential force	
 	float_double nx, ny, nz;                                   // unit vector along normal direction
 	float_double tx, ty, tz;                                   // unit vector along tangential direction
@@ -361,7 +361,6 @@ __device__ void gpu_pre_force_dem_lsd(
 	drijnz = drijn * nz;
 	
 	// may need to consider wall translational velocity in the future
-	for (int i = 0; i < 3; i++) vel_wall[i] = 0.0;
     
 	if (devWall_flag[iwall] == 1) {
 		int rid = devWall_rid[iwall];
@@ -370,9 +369,9 @@ __device__ void gpu_pre_force_dem_lsd(
 		//}
 	}
 	// vij = vi - vj + (wi cross Ri) - (wj cross Rj) (relative velocity)
-	vijx = devVeloX[iparticle] - vel_wall[0];
-	vijy = devVeloY[iparticle] - vel_wall[1];
-	vijz = devVeloZ[iparticle] - vel_wall[2];
+	vijx = devVeloX[iparticle] - vwall_x;
+	vijy = devVeloY[iparticle] - vwall_y;
+	vijz = devVeloZ[iparticle] - vwall_z;
     
 	//if (particle->radius_flag) {
 	//	for (int i = 0; i < 3; i++) Li[i] = (radius[iparticle] - drijn)*(-n[i]);
@@ -746,7 +745,9 @@ __global__ void gpuPreforce(
 	double *devCoord2X, double *devCoord2Y, double *devCoord2Z,
 	double *devCoord3X, double *devCoord3Y, double *devCoord3Z,
 	double *devCoord4X, double *devCoord4Y, double *devCoord4Z,
+	double *devVelo0X, double *devVelo0Y, double *devVelo0Z,
 	double *devA, double *devB, double *devC, double *devD, double ntimestep){	
+
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 
 	//float_double wf, ix, iy, iz, rsq, rij, radius_cut, rijx, rijy, rijz, q, tmp, fi, fj, irho, jrho, rij_inv, delVdotDelR;
@@ -758,12 +759,15 @@ __global__ void gpuPreforce(
 	//float_double fijn, fijnx, fijny, fijnz, fijt, fijtx, fijty, fijtz;
 	//unsigned int j, jj, itype, jtype, jnum;
 	//int contact_flag;
-
+	
 	for (i = i; i < nlocal; i += blockDim.x * gridDim.x){
 		for (int iwall = 0; iwall < nwalls; iwall++) {
 			int rid;
 			int dim, side;
 			double dist, n[3];
+			double vwall0 = 0.0;
+			double vwall1 = 0.0;
+			double vwall2 = 0.0;
 			if (devMask[i] & groupbit) {
 				if (devWall_flag[iwall] == 0) {
 					dim = devWall[iwall] / 2;
@@ -793,13 +797,19 @@ __global__ void gpuPreforce(
 													devCoord1X[rid], devCoord1Y[rid], devCoord1Z[rid],
 													devCoord2X[rid], devCoord2Y[rid], devCoord2Z[rid],
 													devA[rid], devB[rid], devC[rid]);
-					else if (devStyle[rid]==2) dist = gpu_regionPolygon_distance(
-														n, devCoordX[i], devCoordY[i], devCoordZ[i],
-														devCoord1X[rid], devCoord1Y[rid], devCoord1Z[rid],
-														devCoord2X[rid], devCoord2Y[rid], devCoord2Z[rid],
-														devCoord3X[rid], devCoord3Y[rid], devCoord3Z[rid],
-														devCoord4X[rid], devCoord4Y[rid], devCoord4Z[rid],
-														devA[rid], devB[rid], devC[rid], devD[rid]);
+					else if (devStyle[rid] == 2){
+						dist = gpu_regionPolygon_distance(
+							n, devCoordX[i], devCoordY[i], devCoordZ[i],
+							devCoord1X[rid], devCoord1Y[rid], devCoord1Z[rid],
+							devCoord2X[rid], devCoord2Y[rid], devCoord2Z[rid],
+							devCoord3X[rid], devCoord3Y[rid], devCoord3Z[rid],
+							devCoord4X[rid], devCoord4Y[rid], devCoord4Z[rid],
+							devA[rid], devB[rid], devC[rid], devD[rid]);
+						vwall0 = devVelo0X[rid];
+						vwall1 = devVelo0Y[rid];
+						vwall2 = devVelo0Z[rid];
+					}
+	
 				}
 				
 
@@ -813,6 +823,7 @@ __global__ void gpuPreforce(
 						radius_flag, torque_flag,
 						kn, Cn, kt, Ct, mu, cut, nwalls,
 						devForceX, devForceY, devForceZ,
+						vwall0, vwall1, vwall2,
 						i, cut-fabs(dist), n, iwall);
 				}
 				else if (radius_flag == 1 && fabs(dist) < devRadius[i]) {
@@ -824,6 +835,7 @@ __global__ void gpuPreforce(
 						radius_flag, torque_flag,
 						kn, Cn, kt, Ct, mu, cut, nwalls,
 						devForceX, devForceY, devForceZ,
+						vwall0, vwall1, vwall2,
 						i, devRadius[i]-fabs(dist), n, iwall);
 				}
 				else {
@@ -913,6 +925,10 @@ void FixWallDEM::pre_force()
 	// } // for (iwall = 0; iwall < nwalls; iwall++)
 	cudaError_t error_t;
 
+	error_t = cudaMemcpy(domain->hostVelo0X, domain->devVelo0X, domain->nregions * sizeof(double), cudaMemcpyDeviceToHost);
+	error_t = cudaMemcpy(domain->hostVelo0Y, domain->devVelo0Y, domain->nregions * sizeof(double), cudaMemcpyDeviceToHost);
+	error_t = cudaMemcpy(domain->hostVelo0Z, domain->devVelo0Z, domain->nregions * sizeof(double), cudaMemcpyDeviceToHost);
+
 	gpuPreforce << < int(nlocal + BLOCK_SIZE - 1) / BLOCK_SIZE + 1, BLOCK_SIZE >> >
 	 (particle->devCoordX, particle->devCoordY, particle->devCoordZ,
 	  particle->devVeloX, particle->devVeloY, particle->devVeloZ,
@@ -927,6 +943,7 @@ void FixWallDEM::pre_force()
 	  domain->devCoord2X, domain->devCoord2Y, domain->devCoord2Z,
 	  domain->devCoord3X, domain->devCoord3Y, domain->devCoord3Z,
 	  domain->devCoord4X, domain->devCoord4Y, domain->devCoord4Z,
+	  domain->devVelo0X, domain->devVelo0Y, domain->devVelo0Z,
 	  domain->devA, domain->devB, domain->devC, domain->devD, update->ntimestep);
 
 	

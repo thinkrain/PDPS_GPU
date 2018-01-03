@@ -526,6 +526,9 @@ void RegionPolygon::dynamic_check()
 	domain->hostCoord4X[region_id] = domain->regions[region_id]->coords[3][0];
 	domain->hostCoord4Y[region_id] = domain->regions[region_id]->coords[3][1];
 	domain->hostCoord4Z[region_id] = domain->regions[region_id]->coords[3][2];
+	domain->hostVelo0X[region_id] = domain->regions[region_id]->v_coords[0][0];
+	domain->hostVelo0Y[region_id] = domain->regions[region_id]->v_coords[0][1];
+	domain->hostVelo0Z[region_id] = domain->regions[region_id]->v_coords[0][2];
 	domain->hostA[region_id] = domain->regions[region_id]->a;
 	domain->hostB[region_id] = domain->regions[region_id]->b;
 	domain->hostC[region_id] = domain->regions[region_id]->c;
@@ -543,6 +546,9 @@ void RegionPolygon::dynamic_check()
 	cudaMemcpy(domain->devCoord4X, domain->hostCoord4X, domain->nregions * sizeof(double), cudaMemcpyHostToDevice);
 	cudaMemcpy(domain->devCoord4Y, domain->hostCoord4Y, domain->nregions * sizeof(double), cudaMemcpyHostToDevice);
 	cudaMemcpy(domain->devCoord4Z, domain->hostCoord4Z, domain->nregions * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(domain->devVelo0X, domain->hostVelo0X, domain->nregions * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(domain->devVelo0Y, domain->hostVelo0Y, domain->nregions * sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(domain->devVelo0Z, domain->hostVelo0Z, domain->nregions * sizeof(double), cudaMemcpyHostToDevice);
 	cudaMemcpy(domain->devA, domain->hostA, domain->nregions * sizeof(double), cudaMemcpyHostToDevice);
 	cudaMemcpy(domain->devB, domain->hostB, domain->nregions * sizeof(double), cudaMemcpyHostToDevice);
 	cudaMemcpy(domain->devC, domain->hostC, domain->nregions * sizeof(double), cudaMemcpyHostToDevice);
