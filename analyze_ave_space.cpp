@@ -97,9 +97,10 @@ AnalyzeAveSpace::AnalyzeAveSpace(PDPS *ps, int narg, char **arg) : Analyze(ps, n
 		if (originflag[ndims] == COORD) origin[ndims] = atof(arg[iarg + 1]);
 
 		delta[ndims] = atof(arg[iarg+2]);
+		cell[ndims] = atoi(arg[iarg + 3]);
 
 		ndims++;
-		iarg += 3;
+		iarg += 4;
 		if (ndims == domain->dim) break;
 	}
 
@@ -251,7 +252,7 @@ void AnalyzeAveSpace::setup_cells()
 
 	// define cell origin
 	ncells = 1;
-	for (i = 0; i < 3; i++) cell[i] = 1;
+	//for (i = 0; i < 3; i++) cell[i] = 1;
 	for (i = 0; i < ndims; i++) {
 		if (originflag[i] == LOWER) origin[i] = boxlo[dim[i]];
 		else if (originflag[i] == UPPER) origin[i] = boxhi[dim[i]];
@@ -259,7 +260,7 @@ void AnalyzeAveSpace::setup_cells()
 			origin[i] = 0.5 * (boxlo[dim[i]] + boxhi[dim[i]]);
 		}
 
-		cell[i] = static_cast<int> (boxle[dim[i]] * inv_delta[i]);
+		//cell[i] = static_cast<int> (boxle[dim[i]] * inv_delta[i]);
 		if (cell[i] == 0) cell[i] = 1;
 		ncells *= cell[i];
 	}
@@ -297,28 +298,34 @@ void AnalyzeAveSpace::setup_cells()
 		cell_id = k*cell[1]*cell[0] + j*cell[0] + i;
 
 		// find coordinate of the cell
-		if (i < cell[0] - 1) {
-			coord_cell[cell_id][0] = boxlo[dim[0]] + (i + 0.5)*delta[0] - origin[0];
-		}
-		else  {
-			coord_cell[cell_id][0] = 0.5*((boxlo[dim[0]] + (cell[0] - 1)*delta[0]) \
-				                     + boxhi[dim[0]]) - origin[0];
-		}
-		if (ndims >= 2) {
-			if (j < cell[1] - 1)
-				coord_cell[cell_id][1] = boxlo[dim[1]] + (j + 0.5)*delta[1] - origin[1];
-			else {
-				coord_cell[cell_id][1] = 0.5*((boxlo[dim[1]] + (cell[1] - 1)*delta[1]) \
-					                     + boxhi[dim[1]]) - origin[1];
-			}
-		}
-		if (ndims == 3) {
-			if (k < cell[2] - 1 && ndims == 3)
-				coord_cell[cell_id][2] = boxlo[dim[2]] + (k + 0.5)*delta[2] - origin[2];
-			else 
-				coord_cell[cell_id][2] = 0.5*((boxlo[dim[2]] + (cell[2] - 1)*delta[2]) \
-										 + boxhi[dim[2]]) - origin[2];
-		}
+		coord_cell[cell_id][0] = origin[0] + delta[0] * i;
+		if (ndims >= 2)
+			coord_cell[cell_id][1] = origin[1] + delta[1] * j;
+		if (ndims == 3)
+			coord_cell[cell_id][2] = origin[2] + delta[2] * k;
+
+		//if (i < cell[0] - 1) {
+		//	coord_cell[cell_id][0] = boxlo[dim[0]] + (i + 0.5)*delta[0] - origin[0];
+		//}
+		//else  {
+		//	coord_cell[cell_id][0] = 0.5*((boxlo[dim[0]] + (cell[0] - 1)*delta[0]) \
+		//		                     + boxhi[dim[0]]) - origin[0];
+		//}
+		//if (ndims >= 2) {
+		//	if (j < cell[1] - 1)
+		//		coord_cell[cell_id][1] = boxlo[dim[1]] + (j + 0.5)*delta[1] - origin[1];
+		//	else {
+		//		coord_cell[cell_id][1] = 0.5*((boxlo[dim[1]] + (cell[1] - 1)*delta[1]) \
+		//			                     + boxhi[dim[1]]) - origin[1];
+		//	}
+		//}
+		//if (ndims == 3) {
+		//	if (k < cell[2] - 1 && ndims == 3)
+		//		coord_cell[cell_id][2] = boxlo[dim[2]] + (k + 0.5)*delta[2] - origin[2];
+		//	else 
+		//		coord_cell[cell_id][2] = 0.5*((boxlo[dim[2]] + (cell[2] - 1)*delta[2]) \
+		//								 + boxhi[dim[2]]) - origin[2];
+		//}
 
 		// find volume of the cell if required
 		if (area_flag == 1) {
@@ -335,17 +342,17 @@ void AnalyzeAveSpace::setup_cells()
 		else if (vol_flag == 1) {
 			vol_cell[cell_id] = vol;
 			// if the cell is at the edge along dim[0]
-			if (i == cell[0] - 1) {
-				vol_cell[cell_id] *= (inv_delta[0] * (boxhi[dim[0]] - (cell[0]-1)*delta[0]));
-			}
-			// if the cell is at the edge along dim[1]
-			if (j == cell[1] - 1 && ndims >= 2) {
-				vol_cell[cell_id] *= (inv_delta[1] * (boxhi[dim[1]] - (cell[1]-1)*delta[1]));
-			}
-			// if the cell is at the edge along dim[2]
-			if (k == cell[2] - 1 && ndims == 3) {
-				vol_cell[cell_id] *= (inv_delta[2] * (boxhi[dim[2]] - (cell[2]-1)*delta[2]));
-			}
+			//if (i == cell[0] - 1) {
+			//	vol_cell[cell_id] *= (inv_delta[0] * (boxhi[dim[0]] - (cell[0]-1)*delta[0]));
+			//}
+			//// if the cell is at the edge along dim[1]
+			//if (j == cell[1] - 1 && ndims >= 2) {
+			//	vol_cell[cell_id] *= (inv_delta[1] * (boxhi[dim[1]] - (cell[1]-1)*delta[1]));
+			//}
+			//// if the cell is at the edge along dim[2]
+			//if (k == cell[2] - 1 && ndims == 3) {
+			//	vol_cell[cell_id] *= (inv_delta[2] * (boxhi[dim[2]] - (cell[2]-1)*delta[2]));
+			//}
 		}
 	} // for (k = 0; k < cell[2]; k++)
 	  // for (j = 0; j < cell[1]; j++)
@@ -391,11 +398,11 @@ int AnalyzeAveSpace::find_cell_id(int pid)
 	for (int i = 0; i < ndims; i++) {
 		idim = dim[i];
 		// particles may not be in the box
-		if (x[pid][idim] < boxlo[idim]) c[i] = 0;
-		else if (x[pid][idim] >= boxhi[idim]) c[i] = cell[i] - 1;
-		else c[i] = static_cast<int> ((x[pid][idim] - boxlo[idim]) / delta[i]);
+		if (x[pid][idim] < origin[idim]) { cell_id = -1; return cell_id; }//c[i] = 0;
+		else if (x[pid][idim] >= boxhi[idim]) { cell_id = -1; return cell_id; }//c[i] = cell[i] - 1;
+		else c[i] = static_cast<int> ((x[pid][idim] - origin[idim]) / delta[i]);
 		// the last cell may have large size
-		if (c[i] == cell[i]) c[i] = cell[i] - 1;
+		if (c[i] >= cell[i]) { cell_id = -1; return cell_id; } // c[i] = cell[i] - 1;
 	}
 
 	cell_id = c[2]*cell[1]*cell[0] + c[1]*cell[0] + c[0];
@@ -451,6 +458,7 @@ void AnalyzeAveSpace::parse_fields(int iarg, int narg, char **arg)
 			iarg++;
 		}
 		else if (!strcmp(arg[iarg], "density/number")) {
+			num_flag = 1;
 			if (domain->dim == 2) {
 				area_flag = 1;
 				field_ave_flag[nfields] = AREA;
@@ -773,6 +781,8 @@ void AnalyzeAveSpace::compute_density_number()
 	for (int i = 0; i < nlocal; i++) {
 		if (mask[i] & groupbit) {
 			cell_id = find_cell_id(i);
+			if (cell_id == -1)
+				continue;
 			array[cell_id][icol] += 1.0;
 		}
 	}

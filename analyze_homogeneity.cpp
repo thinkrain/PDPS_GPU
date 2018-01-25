@@ -26,7 +26,7 @@ See the README file in the PDPS directory.
 #include "particle.h"
 #include "update.h"
 #include "style_analyze.h"
-
+#include "group.h"
 using namespace PDPS_NS;
 
 enum{INT, FLOAT};
@@ -303,7 +303,8 @@ void AnalyzeHomogeneity::invoke_analyze()
 		if (method == LOCAL_AVERAGE) {
 			for (ifield = 0; ifield < nfields; ifield++) {
 				for (int j = 0; j < field_ncols[ifield]; j++) {
-					array_ave[0][icol+j] = (eta[icol+j] - eta_r[icol+j]) / (eta_s[icol+j] - eta_r[icol+j]);
+					//array_ave[0][icol+j] = (eta[icol+j] - eta_r[icol+j]) / (eta_s[icol+j] - eta_r[icol+j]);
+					array_ave[0][icol + j] = eta[icol + j];
 				}
 				icol += field_ncols[ifield];
 			}
@@ -424,6 +425,7 @@ void AnalyzeHomogeneity::compute_local_average(double **array_attr, int *numAll_
 			}
 		}
 		mean /= nvalids;
+
 		for (int i = 0; i < rows; i++) {
 			if (numAll_attr[i] >= num_min) {
 				variance += (array_attr[i][j] - mean)*(array_attr[i][j] - mean);
@@ -434,6 +436,10 @@ void AnalyzeHomogeneity::compute_local_average(double **array_attr, int *numAll_
 		eta[icol+j] = sigma / mean;
 		if (eta_s_flag == 0) {
 			eta_s[icol + j] = eta[icol + j];
+			double p = 1.0 / rows * 0.7162;
+			double n_ave = group->gparticles[gid] * 1.0 / rows;
+			eta_r[icol + j] = sqrt((1 - p) / n_ave);	// standard error for number of particles in each cell
+
 		}
 	}
 	eta_s_flag = 1;
